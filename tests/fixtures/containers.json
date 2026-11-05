@@ -1,0 +1,30 @@
+[
+  {
+    "Id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "Name": "/alpha-dev",
+    "State": {"Running": true, "Paused": false},
+    "Config": {"User": "root", "WorkingDir": "", "Labels": {
+      "devcontainer.local_folder": "/projects/alpha",
+      "devcontainer.config_file": "/projects/alpha/.devcontainer/devcontainer.json",
+      "devcontainer.metadata": "[{\"remoteUser\":\"old\"},{\"remoteUser\":\"developer\"}]"
+    }},
+    "Mounts": [{"Type": "bind", "Source": "/projects/alpha", "Destination": "/workspaces/alpha"}]
+  },
+  {
+    "Id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "Name": "/beta-compose",
+    "State": {"Running": true},
+    "Config": {"User": "1001:1001", "WorkingDir": "/srv/beta", "Labels": {
+      "vsch.local.folder": "/projects/beta",
+      "devcontainer.metadata": "{}"
+    }},
+    "Mounts": [{"Type": "volume", "Source": "/var/lib/docker/volumes/beta/_data", "Destination": "/srv/beta"}]
+  },
+  {
+    "Id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "Name": "/ordinary",
+    "State": {"Running": true},
+    "Config": {"User": "", "WorkingDir": "", "Labels": null},
+    "Mounts": []
+  }
+]

@@ -1,0 +1,6 @@
+{
+  "name": "hatch-devcontainer-resolver",
+  "private": true,
+  "version": "0.2.0",
+  "dependencies": { "@devcontainers/cli": "0.90.0" }
+}

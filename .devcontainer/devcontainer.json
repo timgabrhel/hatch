@@ -1,0 +1,33 @@
+{
+  "name": "Hatch development",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "22",
+      "nodeGypDependencies": false,
+      "pnpmVersion": "none"
+    }
+  },
+  "remoteUser": "vscode",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/hatch,type=bind",
+  "workspaceFolder": "/workspaces/hatch",
+  "userEnvProbe": "loginInteractiveShell",
+  "remoteEnv": {
+    "PATH": "${containerWorkspaceFolder}/tooling/node_modules/.bin:${containerEnv:PATH}"
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "rust-analyzer.check.command": "clippy"
+      }
+    }
+  }
+}
