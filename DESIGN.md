@@ -1,7 +1,20 @@
 # Hatch design and implementation status
 
-Updated 2026-11-06. Version 0.5.1. Generic container-side worktree management is
+Updated 2026-11-06. The package version is defined in Cargo.toml. Generic container-side worktree management is
 implemented. RAIC initialization remains project-owned and explicitly selected.
+
+## Documentation map
+
+[README.md](README.md) leads with archive installation and quick-start paths for
+interactive and direct CLI launch, followed by a command overview. Source-build instructions live in the development guide.
+Detailed user guidance lives in [docs/](docs/usage.md):
+[installation](docs/installation.md), [guided launch](docs/usage.md),
+[CLI reference](docs/cli.md), [configuration](docs/configuration.md),
+[agents](docs/agents.md), [worktrees](docs/worktrees.md), [Herdr](docs/herdr.md),
+and [development](docs/development.md).
+
+This file retains architecture, implementation status, and historical validation.
+Native archives include the README, these guides, and contributor instructions.
 
 ## Goals and boundaries
 
@@ -22,6 +35,7 @@ implemented. RAIC initialization remains project-owned and explicitly selected.
 | Command/option | Behavior |
 |---|---|
 | `hatch` | Guided container/agent selection in terminals; explicit target required in scripts |
+| `update` | Update the running host executable from the latest verified release |
 | `up --config PATH` | Reuse a running match, otherwise official CLI start/create, then launch |
 | `containers [--json]` | Interactive browser; JSON/nonterminal/--no-input is read-only inventory |
 | `inspect [--json]` | Select a container; launch context, agent availability and executable paths |
@@ -76,7 +90,8 @@ remain supported; there is no additional host credential synchronization.
 Launch and inspect honor userEnvProbe, defaulting to loginInteractiveShell for merged
 configs. The selected UID's home/shell are detected through passwd; supported probe
 shells are sh/bash/dash/ash/zsh/ksh. Shell startup runs as that user, then remoteEnv is
-applied. Inspect and container inventory never run shell profiles. Containers without
+applied. Inspect uses the same configured shell probing for executable checks;
+container inventory does not run shell profiles. Containers without
 these prerequisites can use userEnvProbe:none and explicit remoteEnv. Unsupported
 shells fail visibly rather than silently selecting Bash.
 
@@ -114,8 +129,8 @@ but cannot hide the results of other agents. Ctrl-C remains the terminal cancell
 Authentication probes, the auth column, and the JSON authentication field have been
 removed at the user's request. Login and access checks belong to the agent itself.
 Antigravity and its agy alias/installer have been removed at the user's request.
-It uses launch shell
-probing but does not install, log in, invoke a model, or weaken sandboxing.
+Inspect uses launch shell probing but does not install, log in, invoke a model,
+or weaken sandboxing.
 Persistence is an explicit devcontainer decision.
 
 ## Menu UX
@@ -236,14 +251,28 @@ explicit project exception, not automatic credential sharing by the Hatch runtim
 Sources must exist on the local Docker host; keychain-only and SSH auth are not forwarded.
 Existing containers must be recreated to gain these mounts; no live rebuild was performed.
 
-The per-user installer atomically installs Hatch alongside cf, runs the installed binary
-unless `--no-launch` is supplied, and optionally installs
-the pinned official resolver with npm. It never replaces an existing devcontainer
-command, edits shell profiles, or installs container agents. A native Linux archive
-includes binary, docs, installer, resolver lockfile, checksums, and dependency notices.
-Archive metadata is deterministic. Native builds are dynamically linked, not guaranteed
-portable across all Linux distributions. CI checks and native x86_64/ARM64 artifact
-workflows are included; external CI/public publishing has not run here.
+The per-user installer atomically installs Hatch alongside cf. Piped installs select
+and verify the latest GitHub archive for the host architecture; local installs use the
+packaged or built binary and launch unless --no-launch is supplied. PATH is checked
+before offering a shell-profile change, which requires explicit consent and is
+idempotent. Prompts use /dev/tty for curl | sh; --no-input skips them. Missing resolver
+setup is offered when Node.js/npm are present. Existing resolver commands are retained.
+
+`hatch update` runs the embedded installer against the current executable's directory,
+without Docker, resolver setup, profile changes, or launch. Equal/newer local versions
+are retained. Downloads, checksums, and executable versions are validated before atomic
+replacement. It never fetches and executes a mutable installer script from main.
+
+Native Linux archives include binary, docs, installer, resolver lockfile, and dependency
+notices, with sidecar checksums and deterministic archive metadata. Builds are dynamically
+linked and not guaranteed portable across all Linux distributions.
+
+The Tars release design is adapted to Cargo: manual patch/minor/major or exact-version
+selection updates Cargo.toml/Cargo.lock in a release PR; approved checks gate merging
+the validated head. Version changes on main create an immutable tag and explicitly
+dispatch release.yml. Both native Linux architectures, release process tests, and archive
+smoke tests gate draft publication. Published assets cannot be overwritten. Python
+standard-library helpers are CI tooling only; the CLI remains synchronous Rust.
 
 cf remains unchanged, including its project-specific worktree behavior. Replacing cf
 or adding compatibility shims is outside the generic worktree implementation.
@@ -365,7 +394,7 @@ generic agent alias shared with Grok. Grok's native bin directory is included on
 during installation to prevent it replacing Cursor's alias; optional shell-profile setup
 is suppressed with SHELL=/bin/sh. Copilot's prefix is explicitly user-local even as root.
 Vendor installers may configure container
-shell state; no host authentication/state is copied. See README for official sources.
+shell state; no host authentication/state is copied. See [agent documentation](docs/agents.md#supported-agents) for official sources.
 
 Tests cover exact argv and install paths for all six, official bootstrap routes,
 prerequisite failures, partial download rejection/cleanup, one-time navigation hints,

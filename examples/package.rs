@@ -70,6 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for file in [
         "README.md",
         "DESIGN.md",
+        "AGENTS.md",
         "scripts/install.sh",
         "tooling/package.json",
         "tooling/package-lock.json",
@@ -79,6 +80,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &base.join(file),
             if file.ends_with(".sh") { 0o755 } else { 0o644 },
         )?;
+    }
+    for entry in fs::read_dir(root.join("docs"))? {
+        let path = entry?.path();
+        if path.is_file() && path.extension().is_some_and(|extension| extension == "md") {
+            copy(
+                &path,
+                &base.join("docs").join(path.file_name().unwrap()),
+                0o644,
+            )?;
+        }
     }
     let mut notices = String::new();
     for p in &packages {
