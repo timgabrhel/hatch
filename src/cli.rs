@@ -135,6 +135,8 @@ pub struct Cli {
 
 #[derive(Clone, Debug, Subcommand)]
 pub enum Action {
+    /// Update this Hatch executable to the latest GitHub release.
+    Update,
     /// List Git worktrees in the selected container without launching an agent.
     Worktrees {
         #[arg(long)]

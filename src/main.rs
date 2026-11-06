@@ -9,6 +9,7 @@ mod menu;
 mod process;
 mod prompt;
 mod provision;
+mod update;
 mod workspace_input;
 mod worktrees;
 
@@ -20,6 +21,9 @@ use std::io::IsTerminal;
 type Result<T> = std::result::Result<T, String>;
 
 fn run(mut cli: Cli, mut tail: Vec<OsString>) -> Result<()> {
+    if matches!(cli.command, Some(Action::Update)) {
+        return update::run(&cli, &tail);
+    }
     if matches!(cli.command, Some(Action::Options)) {
         Cli::command()
             .mut_args(|a| a.hide(false))
