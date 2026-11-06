@@ -211,7 +211,7 @@ pub fn review(fields: &[(&str, &str)], install: bool) -> Result<bool> {
     } else {
         "Confirm and launch"
     };
-    let labels = vec!["Back".into(), action.into()];
+    let labels = vec![action.into()];
     if plain() {
         // Numbered mode preserves its transcript. Reuse an unchanged summary
         // when returning from Back instead of appending the same block again.
@@ -223,7 +223,7 @@ pub fn review(fields: &[(&str, &str)], install: bool) -> Result<bool> {
             *last = summary;
         }
         drop(last);
-        return choose_default("Launch this session?", &labels, true, Some(0)).map(|i| i == 1);
+        return choose_default("Launch this session?", &labels, true, Some(0)).map(|i| i == 0);
     }
     navigation();
     let theme = ReviewTheme {
@@ -235,7 +235,7 @@ pub fn review(fields: &[(&str, &str)], install: bool) -> Result<bool> {
         .default(0)
         .report(false)
         .interact_on_opt(&Term::stderr())
-        .map(|choice| choice == Some(1))
+        .map(|choice| choice == Some(0))
         .map_err(|e| format!("menu input: {e}"))
 }
 fn review_text(fields: &[(&str, &str)], install: bool) -> String {

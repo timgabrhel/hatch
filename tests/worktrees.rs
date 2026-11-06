@@ -360,7 +360,7 @@ fn escape_returns_from_initialization_and_checkout_without_changing_workspace() 
         p.expect(if plain {
             PROMPT
         } else {
-            "Initialize this checkout?"
+            "Run project setup before launching?"
         });
         p.send(b"\x1b");
         p.expect(if plain {
@@ -379,6 +379,8 @@ fn escape_returns_from_initialization_and_checkout_without_changing_workspace() 
         p.send(b"\r");
         let output = p.finish_with_review(0);
         assert!(!output.contains("Cancel launch"));
+        assert!(!output.contains(") Back"));
+        contains(&output, "Skip project setup");
         contains(&output, "Path:");
         let call = h.calls().into_iter().find(|c| c.launches()).unwrap();
         assert!(call.args.contains(&h.path("repo").into_os_string()));
@@ -399,7 +401,7 @@ fn guided_checkout_selection_cancel_and_creation_cancel_are_readonly() {
     ]);
     h.menu(
         &args,
-        &[(PROMPT, "4"), (PROMPT, "1"), (PROMPT, "1"), (PROMPT, "5")],
+        &[(PROMPT, "4"), (PROMPT, "1"), (PROMPT, "1"), (PROMPT, "q")],
         1,
     );
     assert!(h.path("feature").is_dir());
@@ -425,7 +427,12 @@ fn guided_skill_discovery_uses_main_clone_and_only_passes_a_prompt() {
         "codex",
         "--here",
     ]);
-    h.menu(&args, &[(PROMPT, "2"), (PROMPT, "3"), (PROMPT, "1")], 0);
+    let output = h.menu(&args, &[(PROMPT, "2"), (PROMPT, "3"), (PROMPT, "1")], 0);
+    let summary = output.split("Your session").last().unwrap();
+    contains(summary, "Initialization:");
+    contains(summary, "Ask Codex to follow the selected skill");
+    contains(summary, skills.join("SKILL.md").to_str().unwrap());
+    assert!(!output.contains("Back to checkouts"));
     let call = h.calls().into_iter().find(|c| c.launches()).unwrap();
     let prompt = call.args.last().unwrap().to_str().unwrap();
     contains(prompt, skills.join("SKILL.md").to_str().unwrap());
@@ -451,9 +458,11 @@ fn guided_create_cancel_has_no_git_mutation_and_selects_existing_checkout() {
             (PROMPT, "2"),
             ("New branch name", "fresh"),
             ("Starting ref or commit", "HEAD"),
-            ("Worktree destination", destination.to_str().unwrap()),
-            (PROMPT, "1"),
-            (PROMPT, "4"),
+            ("New checkout folder", destination.to_str().unwrap()),
+            (PROMPT, "q"),
+            ("New checkout folder", "q"),
+            (PROMPT, "q"),
+            (PROMPT, "q"),
         ],
         1,
     );
@@ -687,4 +696,49 @@ fn submodule_worktree_is_never_force_removed() {
     );
     assert!(h.path("feature/module/file").is_file());
     assert!(!h.calls().iter().any(|c| c.has("--force")));
+}
+
+#[test]
+fn guided_create_explains_location_and_reviews_skipped_setup() {
+    let h = repo();
+    let destination = h.path("new-checkout");
+    let mut p = h.pty(&strings(&[
+        "--container",
+        "alpha-dev",
+        "--metadata-only",
+        "--agent",
+        "codex",
+        "--here",
+    ]));
+    for answer in ["2", "2"] {
+        p.expect(PROMPT);
+        p.send(format!("{answer}\n").as_bytes());
+    }
+    p.expect("New branch name");
+    p.send(b"topic\n");
+    p.expect("Starting ref or commit");
+    p.send(b"HEAD\n");
+    p.expect("New checkout folder");
+    contains(&p.output, "Saved project folder");
+    contains(&p.output, "This folder will hold the new branch's files");
+    contains(&p.output, h.path("repo").to_str().unwrap());
+    p.send(format!("{}\n", destination.display()).as_bytes());
+    p.expect("Create this worktree?");
+    p.expect(PROMPT);
+    assert!(!destination.exists());
+    p.send(b"1\n");
+    p.expect("Run project setup before launching?");
+    p.expect(PROMPT);
+    p.send(b"1\n");
+    p.expect("Launch this session?");
+    p.expect(PROMPT);
+    let summary = p.output.split("Your session").last().unwrap();
+    contains(summary, "Initialization:");
+    contains(summary, "Skip project setup");
+    contains(summary, destination.to_str().unwrap());
+    assert!(!p.output.contains(") Back"));
+    assert!(destination.exists());
+    h.no_launch();
+    p.send(b"1\n");
+    p.finish(0);
 }

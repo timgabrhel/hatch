@@ -495,16 +495,13 @@ fn create_menu(context: &Context, container: &Container) -> Result<Option<String
     )?)?;
     let mut branches = branches.lines().map(String::from).collect::<Vec<_>>();
     let existing = branches.len();
-    branches.extend(["Create a new branch…".into(), "Back".into()]);
+    branches.push("Create a new branch…".into());
     'branch: loop {
         let choice = match prompt::choose_default("Choose a branch", &branches, true, Some(0)) {
             Ok(choice) => choice,
             Err(e) if cancelled(&e) => return Ok(None),
             Err(e) => return Err(e),
         };
-        if choice == existing + 1 {
-            return Ok(None);
-        }
         'name: loop {
             let (branch, start) = if choice == existing {
                 let Some(branch) = input("New branch name")? else {
@@ -520,10 +517,16 @@ fn create_menu(context: &Context, container: &Container) -> Result<Option<String
                 (branches[choice].clone(), None)
             };
             loop {
-                let Some(path) = input(
-                    "Worktree destination inside container (absolute path on a persistent mount)",
-                )?
-                else {
+                let saved_folder = &persistent(container, &context.workspace)?.destination;
+                prompt::section(
+                    "New checkout location",
+                    &[
+                        ("Current checkout", &context.workspace),
+                        ("Saved project folder", saved_folder),
+                    ],
+                );
+                prompt::note("This folder will hold the new branch's files. Enter a full path inside the container, under a saved project folder such as the one above. Hatch creates the folder; it must not already exist.");
+                let Some(path) = input("New checkout folder (absolute container path)")? else {
                     continue 'branch;
                 };
                 prompt::section(
@@ -537,11 +540,11 @@ fn create_menu(context: &Context, container: &Container) -> Result<Option<String
                 prompt::note("Uses relative Git links with Git 2.48+ (required when host/container paths differ). Git may enable the relativeWorktrees extension. No fetch or extra project bootstrap runs; normal Git hooks may execute.");
                 match prompt::choose_default(
                     "Create this worktree?",
-                    &["Back".into(), "Create worktree".into()],
+                    &["Create worktree".into()],
                     true,
                     Some(0),
                 ) {
-                    Ok(1) => {
+                    Ok(0) => {
                         return create(context, container, &path, &branch, start.as_deref())
                             .map(Some)
                     }
@@ -570,7 +573,7 @@ fn initialization_skill(context: &Context) -> Result<Option<String>> {
     }
     if !paths.is_empty() {
         let mut labels = paths.clone();
-        labels.extend(["Paste another skill path…".into(), "Back".into()]);
+        labels.push("Paste another skill path…".into());
         let choice = match prompt::choose_default(
             "Choose an initialization skill",
             &labels,
@@ -583,9 +586,6 @@ fn initialization_skill(context: &Context) -> Result<Option<String>> {
         };
         if let Some(path) = paths.get(choice) {
             return Ok(Some(path.clone()));
-        }
-        if choice == paths.len() + 1 {
-            return Ok(None);
         }
     }
     let path = input("Initialization SKILL.md path inside container (absolute)")?;
@@ -604,14 +604,18 @@ fn setup_menu(cli: &mut Cli, context: &Context, tail: &[OsString]) -> Result<()>
             && cli.agent_path.is_none()
             && tail.is_empty();
         let mut choices = vec![
-            "Launch without initialization".into(),
+            "Skip project setup".into(),
             "Run a project setup command…".into(),
         ];
         if supported {
             choices.push("Ask the agent to read and run an initialization skill…".into());
         }
-        choices.push("Back to checkouts".into());
-        match prompt::choose_default("Initialize this checkout?", &choices, true, Some(0))? {
+        match prompt::choose_default(
+            "Run project setup before launching?",
+            &choices,
+            true,
+            Some(0),
+        )? {
             0 => return Ok(()),
             1 => {
                 if let Some(command) = input("Project setup command (runs inside this checkout)")? {
@@ -668,11 +672,7 @@ pub fn choose(
                 &row.path,
             ));
         }
-        choices.extend([
-            "Create worktree…".into(),
-            "Remove worktree…".into(),
-            "Back".into(),
-        ]);
+        choices.extend(["Create worktree…".into(), "Remove worktree…".into()]);
         let choice =
             prompt::choose_default("Choose a checkout / worktree", &choices, true, Some(0))?;
         if choice == 0 {
@@ -710,11 +710,14 @@ pub fn choose(
                 Err(e) => prompt::warning(&e),
             }
         } else if choice == linked.len() + 2 {
-            let mut labels = linked
+            let labels = linked
                 .iter()
                 .map(|w| prompt::path_item(w.branch.as_deref().unwrap_or("detached HEAD"), &w.path))
                 .collect::<Vec<_>>();
-            labels.push("Back".into());
+            if labels.is_empty() {
+                prompt::note("There are no linked worktrees to remove.");
+                continue;
+            }
             let choice = match prompt::choose("Choose a worktree to remove", &labels, true) {
                 Ok(i) => i,
                 Err(e) if cancelled(&e) => continue,

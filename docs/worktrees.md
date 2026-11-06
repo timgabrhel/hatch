@@ -22,6 +22,12 @@ hatch worktree create /workspaces/project.worktrees/topic --branch topic --from 
 hatch worktree remove /workspaces/project.worktrees/topic --container my-devcontainer --yes
 ```
 
+When creating a worktree, **New checkout folder** is where the branch's files will
+live, using the path visible inside the selected container. Hatch shows the current
+checkout and its saved project folder to help you choose a location. Enter a new folder under
+a persistent mount; Hatch creates it after confirmation. This does not create another
+container. Escape revisits the preceding choice; there are no Back menu rows.
+
 ## Container-side Git
 
 All paths above are **container paths**. Git runs inside the selected container as its
@@ -56,8 +62,9 @@ mounts. Normal Git hooks may run when creating a checkout.
 
 ## Initialization
 
-After selecting or creating a worktree, initialization is optional and defaults to
-launching without it.
+After selecting or creating a worktree, **Run project setup before launching?**
+defaults to **Skip project setup**. The **Your session** review shows that choice,
+or the selected command/skill and how it will run, before launch.
 
 Choose an explicit project shell command or ask Codex/Claude to
 read an initialization skill. The skill picker lists `.agents/skills/*/SKILL.md` in the

@@ -249,6 +249,13 @@ fn run(mut cli: Cli, mut tail: Vec<OsString>) -> Result<()> {
                     install::PreparedAgent::Available(_) => "Installed",
                     install::PreparedAgent::Install(_) => "! Install",
                 };
+                let initialization = if cli.setup_command.is_some() {
+                    "Run setup command before launch".to_owned()
+                } else if cli.init_skill.is_some() {
+                    format!("Ask {} to follow the selected skill", cli.agent.label())
+                } else {
+                    "Skip project setup".to_owned()
+                };
                 let mut fields: Vec<(&str, &str)> = vec![
                     ("Container", &context.container_name),
                     ("Workspace", &context.workspace),
@@ -256,6 +263,7 @@ fn run(mut cli: Cli, mut tail: Vec<OsString>) -> Result<()> {
                     ("Agent", cli.agent.label()),
                     ("Herdr", herdr::destination(&cli)),
                     ("Agent status", agent_action),
+                    ("Initialization", &initialization),
                 ];
                 if let Some(command) = &cli.setup_command {
                     fields.push(("Setup command", command));

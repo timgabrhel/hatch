@@ -64,7 +64,7 @@ tar, gzip, and sha256sum. Build products and local dependency installations are 
   after container startup and checkout selection. Show installation required in the Your session
   summary and use Install Agent & Launch as its final action for missing agents.
   Available agents use Confirm and launch; do not show a separate install prompt. Setup and handoff also
-  wait for confirmation. Back/Escape revisits choices; --no-input skips review.
+  wait for confirmation. Escape revisits choices; do not add Back menu items. --no-input skips review.
   Read the current ID from HERDR_WORKSPACE_ID; explicit destination flags bypass.
 - Detect prerequisites and install only in the selected container as its intended user.
   Do not copy host credentials or agent state, or silently edit devcontainer configuration.

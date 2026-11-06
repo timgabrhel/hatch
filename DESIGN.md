@@ -184,7 +184,7 @@ paths are explicit errors. No editor tasks/settings are executed. Flags accept a
 file too; multi-root unattended usage requires an explicit chosen directory.
 
 Dialoguer/console keep inline arrow-key menus, paging, Back/Esc and terminal restoration.
-Navigation help appears once. Agent and config lists omit Back to containers; Escape/q returns instead.
+Navigation help appears once. All selection and review menus omit Back rows; Escape/q returns instead.
 Single-line menus, including agent selection, have no
 five-item page limit; path-detail menus retain it. A stylized lowercase wordmark becomes HATCH on narrow
 terminals, with the Cargo package version below the tagline. Choices separate the
@@ -196,11 +196,12 @@ Path prompts read keys through console so Escape immediately returns to the
 previous menu, including in plain mode; partial input is discarded and terminal settings
 are restored. Empty Enter or q also goes back. Paths accept quotes and ~/, without shell
 execution. The Your session review identifies container/workspace/user/agent/destination,
-pending installation, setup/initialization, and agent arguments. Interactive launches
+pending installation, the initialization mode (including skipped setup), the selected
+command or skill path, and agent arguments. Interactive launches
 require Install Agent & Launch for a missing agent, or Confirm and launch for an
 available agent, before installation, setup, Herdr terminal creation or agent execution.
 The summary is part of the arrow menu redraw area, with explicit wrapping so Back
-clears all rows. Numbered mode reuses an unchanged summary in its transcript. Back is the default; Escape returns to the preceding choice.
+clears all rows. Numbered mode reuses an unchanged summary in its transcript. The review contains only its launch action; Escape returns to the preceding choice.
 Unattended --no-input launches retain their explicit-command behavior. Notices
 and errors wrap into short blocks; inspect renders readable terminal summaries,
 with --json or redirected output preserving full JSON. Plain and NO_COLOR modes remain.
@@ -311,7 +312,9 @@ launch; Hatch does not start a polling service or daemon to monitor them.
 The user resumed worktree implementation. `worktrees.rs` runs Git inside the selected
 container as its intended user. This supports host-shared repositories and container-only
 volumes without guessing that Docker daemon paths are local. Interactive launches offer
-current checkout, existing worktrees, creation, removal and cancellation. Explicit
+current checkout, existing worktrees, creation, removal and Escape cancellation.
+Creation explains that the new checkout folder holds the branch files inside the
+container, and shows the current checkout and the persistent mount containing it. Explicit
 workspace/worktree inputs skip selection. Management commands never provision containers
 or launch/install agents. Inspect/inventory do not gain Git probes.
 

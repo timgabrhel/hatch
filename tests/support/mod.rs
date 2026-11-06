@@ -399,15 +399,15 @@ impl Pty {
                     if review.contains("Confirm and launch")
                         || review.contains("Install Agent & Launch")
                     {
-                        if review.contains("2) Confirm and launch")
-                            || review.contains("2) Install Agent & Launch")
+                        if review.contains("1) Confirm and launch")
+                            || review.contains("1) Install Agent & Launch")
                         {
                             if review.contains(PROMPT) {
-                                self.send(b"2\n");
+                                self.send(b"1\n");
                                 accept_review = false;
                             }
                         } else {
-                            self.send(b"\x1b[B\r");
+                            self.send(b"\r");
                             accept_review = false;
                         }
                     }

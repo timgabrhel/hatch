@@ -45,9 +45,10 @@ Inside Herdr, the final destination choice is **New workspace** or **This worksp
 
 ## Review and launch
 
-**Your session** summarizes the target, agent, destination, arguments, and any setup.
+**Your session** summarizes the target, agent, destination, arguments, and initialization:
+skipped setup, a command to run, or the agent and skill path selected.
 Choose **Confirm and launch**, or **Install Agent & Launch** when the agent is missing.
-**Back** is the default. Installation, setup, and terminal handoff wait for this
+Escape returns to the preceding choice; menus have no Back rows. Installation, setup, and terminal handoff wait for this
 confirmation; container startup and worktree changes have their own earlier confirmations.
 
 ## Navigation and accessibility

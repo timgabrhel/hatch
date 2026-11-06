@@ -243,14 +243,8 @@ pub fn choose(config: &Path) -> Result<PathBuf> {
             index
         });
         let paste_index = labels.len();
-        labels.extend([
-            "Paste a .code-workspace file or folder path…".into(),
-            "Back".into(),
-        ]);
+        labels.push("Paste a .code-workspace file or folder path…".into());
         let index = prompt::choose_default("Select a workspace", &labels, true, Some(0))?;
-        if index == paste_index + 1 {
-            return Err("cancelled; nothing launched".into());
-        }
         if Some(index) == create_index {
             let path = create.as_ref().unwrap();
             match create_empty_workspace(path) {

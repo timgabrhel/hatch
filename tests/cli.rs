@@ -299,7 +299,7 @@ fn install_is_not_an_upgrade() {
 }
 #[test]
 fn final_review_accepts_or_declines_installation() {
-    for (answer, status, count) in [("1", 1, 0), ("2", 0, 1)] {
+    for (answer, status, count) in [("q", 1, 0), ("1", 0, 1)] {
         let mut h = Harness::new();
         h.set("HATCH_TEST_MODE", "needs-install");
         h.menu(
@@ -882,7 +882,7 @@ fn here_and_piped_input_stay_in_current_terminal() {
 }
 #[test]
 fn combined_install_and_launch_follows_herdr_selection_and_review() {
-    for (answer, status) in [(b"1\n", 1), (b"2\n", 0)] {
+    for (answer, status) in [(b"q\n", 1), (b"1\n", 0)] {
         let mut h = Harness::new();
         h.herdr();
         h.set("HATCH_TEST_MODE", "needs-install");
@@ -1044,6 +1044,8 @@ fn session_review_gates_install_setup_and_herdr_handoff() {
             });
             contains(&p.output, "! Install");
             contains(&p.output, "echo fixture-setup");
+            contains(&p.output, "Run setup command before launch");
+            assert!(!p.output.contains(") Back"));
             contains(&p.output, "--version");
             assert!(h.calls().iter().all(|c| !(c.has("hatch-install")
                 && c.args.last().unwrap() == "install")
@@ -1051,7 +1053,7 @@ fn session_review_gates_install_setup_and_herdr_handoff() {
             assert!(h.herdr_calls().is_empty());
             h.no_launch();
             if confirm {
-                p.send(if plain { b"2\r" } else { b"\x1b[B\r" });
+                p.send(if plain { b"1\r" } else { b"\r" });
                 p.finish(0);
                 assert!(h
                     .calls()
@@ -1206,7 +1208,7 @@ fn workspace_back_and_invalid_path_never_launch_or_build() {
             (PROMPT, "3"),
             (PROMPT, "2"),
             ("devcontainer.json path", a[1].to_str().unwrap()),
-            (PROMPT, "2"),
+            (PROMPT, "q"),
             (PROMPT, "q"),
             (PROMPT, "q"),
         ],
@@ -1340,7 +1342,7 @@ fn escape_from_workspace_path_returns_to_workspace_selection() {
     p.send(b"/unfinished\x1b");
     p.expect("Select a workspace");
     p.expect(PROMPT);
-    p.send(b"2\n");
+    p.send(b"\x1b");
     p.expect("Select a devcontainer config");
     p.expect(PROMPT);
     p.send(b"\x1b");

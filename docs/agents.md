@@ -18,7 +18,7 @@ fallback installation.
 
 The final review shows **Installed** for a working executable, or yellow **! Install**
 when installation is needed. Choose **Install Agent & Launch** to approve installation
-and launch together. Back is the default; there is no separate install prompt.
+and launch together. Escape returns to the preceding choice; there is no separate install prompt.
 
 No agent is installed before that final confirmation. Failed prerequisites or
 installation prevent launch and Herdr terminal creation.

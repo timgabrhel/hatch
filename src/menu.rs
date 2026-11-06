@@ -162,11 +162,10 @@ fn configured(cli: &mut Cli) -> Result<Container> {
             cli.host_workspace = Some(workspace_input::choose(&config)?);
         }
         if !cli.agent_explicit && cli.agent_path.is_none() {
-            let mut labels = Agent::ALL
+            let labels = Agent::ALL
                 .iter()
                 .map(|a| a.label().to_owned())
                 .collect::<Vec<_>>();
-            labels.push("Back".into());
             let default = Agent::ALL.iter().position(|a| *a == cli.agent).unwrap_or(0);
             let choice =
                 match prompt::choose_default("Select an agent", &labels, true, Some(default)) {
