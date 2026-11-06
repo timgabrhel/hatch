@@ -7,10 +7,17 @@ use crate::{
 };
 use std::{io, process::Stdio};
 
-pub fn ensure(cli: &Cli, context: &Context) -> Result<String> {
+pub enum PreparedAgent {
+    Available(String),
+    Install(String),
+}
+
+// Read-only discovery and prerequisite checks; installation is deferred until
+// the final session review has been confirmed. Dropping this plan performs no installation.
+pub fn prepare(cli: &Cli, context: &Context) -> Result<PreparedAgent> {
     let executable = launch::executable(cli)?;
     let original = match launch::probe(context, executable, cli.agent) {
-        Ok(()) => return Ok(executable.into()),
+        Ok(()) => return Ok(PreparedAgent::Available(executable.into())),
         Err(error) => error,
     };
     if cli.agent_path.is_some() {
@@ -32,7 +39,7 @@ pub fn ensure(cli: &Cli, context: &Context) -> Result<String> {
         .ok_or("invalid agent discovery response")?;
     if kind == "found" {
         launch::probe(context, path, cli.agent)?;
-        return Ok(path.into());
+        return Ok(PreparedAgent::Available(path.into()));
     }
     if kind != "missing" {
         return Err("invalid agent discovery status".into());
@@ -51,20 +58,18 @@ pub fn ensure(cli: &Cli, context: &Context) -> Result<String> {
         ),
         "check installer prerequisites",
     )?;
-    prompt::section(
-        "Agent not installed",
-        &[
-            ("Agent", cli.agent.label()),
-            ("Container", &context.container_name),
-            ("User", &context.user),
-        ],
-    );
-    prompt::note(
-        "Installation stays inside this container. It may be lost when the container is rebuilt.",
-    );
-    if !cli.install && !prompt::confirm("Install now?")? {
-        return Err("installation cancelled; nothing launched".into());
-    }
+    Ok(PreparedAgent::Install(format!(
+        "{}/{}",
+        path.trim_end_matches('/'),
+        cli.agent.installed_relative()
+    )))
+}
+
+pub fn execute(plan: PreparedAgent, cli: &Cli, context: &Context) -> Result<String> {
+    let installed = match plan {
+        PreparedAgent::Available(executable) => return Ok(executable),
+        PreparedAgent::Install(path) => path,
+    };
     eprintln!(
         "Installing {} inside {:?} as {:?}...",
         cli.agent.executable(),
@@ -86,11 +91,6 @@ pub fn ensure(cli: &Cli, context: &Context) -> Result<String> {
             "agent installation failed ({status}); no agent launched"
         ));
     }
-    let installed = format!(
-        "{}/{}",
-        path.trim_end_matches('/'),
-        cli.agent.installed_relative()
-    );
     launch::probe(context, &installed, cli.agent)
         .map_err(|e| format!("installer completed but verification failed: {e}"))?;
     Ok(installed)

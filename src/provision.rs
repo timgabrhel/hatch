@@ -82,24 +82,21 @@ pub fn discover(cli: &mut Cli, interactive: bool) -> Result<Vec<Container>> {
     if !containers.is_empty() || matches!(cli.command, Some(Action::Containers { .. })) {
         return Ok(containers);
     }
-    if matches!(
-        cli.command,
-        Some(Action::Inspect { .. } | Action::Doctor { .. })
-    ) {
-        return Err("No running container matches this config and workspace. Use hatch up --config PATH to start/create it".into());
+    if matches!(cli.command, Some(Action::Inspect { .. })) || crate::worktrees::is_action(cli) {
+        return Err("This config and workspace need a container. Use hatch up --config PATH to start/create it".into());
     }
     if !matches!(cli.command, Some(Action::Up)) {
         if !interactive {
-            return Err("No running container matches this config and workspace. Use hatch up --config PATH to start/create it (runs project lifecycle hooks)".into());
+            return Err("This config and workspace need a container. Use hatch up --config PATH to start/create it (runs project lifecycle hooks)".into());
         }
         prompt::section(
-            "Container needed",
+            "Ready to start",
             &[
-                ("Config", &config.display().to_string()),
-                ("Workspace", &folder.display().to_string()),
+                ("Config", &prompt::local_path(&config)),
+                ("Workspace", &prompt::local_path(&folder)),
+                ("Agent", cli.agent.label()),
             ],
         );
-        prompt::note("No running container matches. Starting one runs this project's build and lifecycle hooks, including initializeCommand on the host.");
         let choice = prompt::choose_default(
             "Start this devcontainer?",
             &["Cancel".into(), "Start/create and enter".into()],

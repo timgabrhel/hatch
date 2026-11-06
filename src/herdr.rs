@@ -3,6 +3,49 @@ use crate::{cli::Cli, discovery::Context, process::capture, prompt, Result};
 use serde_json::Value;
 use std::{ffi::OsString, process::Command};
 
+pub fn choose_destination(cli: &mut Cli) -> Result<()> {
+    use std::io::IsTerminal;
+    if cli.here
+        || cli.herdr
+        || cli.herdr_workspace.is_some()
+        || !prompt::available(cli.no_input)
+        || !std::io::stdout().is_terminal()
+        || std::env::var("HERDR_ENV").as_deref() != Ok("1")
+    {
+        return Ok(());
+    }
+    let choice = prompt::choose_default(
+        "Open agent in Herdr",
+        &["New workspace".into(), "This workspace (new tab)".into()],
+        true,
+        Some(0),
+    )?;
+    if choice == 0 {
+        cli.herdr = true;
+    } else {
+        cli.herdr_workspace = Some(std::env::var("HERDR_WORKSPACE_ID")
+            .ok().filter(|id| !id.trim().is_empty())
+            .ok_or("Herdr did not provide the current workspace ID. Use --herdr-workspace ID or --herdr for a new workspace.")?);
+    }
+    Ok(())
+}
+
+pub fn destination(cli: &Cli) -> &'static str {
+    use std::io::IsTerminal;
+    if cli.herdr_workspace.is_some() {
+        "This workspace (new tab)"
+    } else if cli.herdr
+        || (!cli.here
+            && std::env::var("HERDR_ENV").as_deref() == Ok("1")
+            && std::io::stdin().is_terminal()
+            && std::io::stdout().is_terminal())
+    {
+        "New workspace"
+    } else {
+        "Not used (this terminal)"
+    }
+}
+
 fn call(args: &[&str]) -> Result<Value> {
     let bytes = capture(Command::new("herdr").args(args), "Herdr command")?;
     // Current Herdr acknowledges pane run with exit status and no stdout;
@@ -171,14 +214,13 @@ pub fn launch(cli: &Cli, context: &Context, tail: &[OsString]) -> Result<bool> {
         let pane = field(&response, "/result/root_pane/pane_id")?.to_owned();
         (id, pane)
     } else {
-        let label = format!("Hatch · {} · {}", context.container_name, cli.agent.label());
         let response = call(&[
             "workspace",
             "create",
             "--cwd",
             cwd,
             "--label",
-            &label,
+            &context.container_name,
             "--no-focus",
         ])?;
         (

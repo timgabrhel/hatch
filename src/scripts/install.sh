@@ -7,14 +7,12 @@ case "$agent" in
     claude) interpreter=bash; url=https://claude.ai/install.sh ;;
     copilot) interpreter=bash; url=https://gh.io/copilot-install ;;
     opencode) interpreter=bash; url=https://opencode.ai/v2/install ;;
-    agy) interpreter=bash; url=https://antigravity.google/cli/install.sh ;;
     cursor-agent) interpreter=bash; url=https://cursor.com/install ;;
     grok) interpreter=bash; url=https://x.ai/cli/install.sh ;;
     *) echo 'Unsupported agent' >&2; exit 1 ;;
 esac
 extra_tools=
 case "$agent" in
-    agy) extra_tools="sha512sum cp ldd" ;;
     copilot) extra_tools="cp id" ;;
     opencode) extra_tools="cp cat sort wc ls sleep" ;;
     cursor-agent) extra_tools="cp cat" ;;
@@ -29,7 +27,6 @@ case "$(uname -s):$(uname -m)" in
 esac
 case "${HOME:-}" in /*) ;; *) echo 'Installation requires an absolute container HOME.' >&2; exit 1;; esac
 case "$agent" in
-    agy) storage="$HOME/.cache/antigravity" ;;
     cursor-agent) storage="$HOME/.local/share/cursor-agent" ;;
     *) storage="$HOME/.$agent" ;;
 esac
@@ -55,7 +52,6 @@ case "$agent" in
     codex) CODEX_NON_INTERACTIVE=1 CODEX_INSTALL_DIR="$HOME/.local/bin" sh "$installer" ;;
     copilot) PREFIX="$HOME/.local" VERSION=latest bash "$installer" ;;
     opencode) VERSION= bash "$installer" --no-modify-path ;;
-    agy) bash "$installer" --dir "$HOME/.local/bin" ;;
     # Include .grok/bin on PATH to avoid replacing Cursor's generic agent alias.
     # The installer uses SHELL only for optional completion/profile setup.
     grok) GROK_BIN_DIR="$HOME/.grok/bin" SHELL=/bin/sh bash "$installer" ;;

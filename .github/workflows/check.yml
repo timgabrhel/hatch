@@ -14,4 +14,3 @@ jobs:
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked
       - run: cargo build --locked
-      - run: python3 -m unittest discover -s tests -v

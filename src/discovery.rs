@@ -85,10 +85,9 @@ impl Container {
     pub fn display_label(&self) -> String {
         let project = self
             .local_folder()
-            .and_then(|p| Path::new(p).file_name())
-            .and_then(|p| p.to_str())
-            .unwrap_or("workspace unknown");
-        format!("{}  ·  {}", self.name.trim_start_matches('/'), project)
+            .map(|p| prompt::local_path(Path::new(p)))
+            .unwrap_or_else(|| "workspace unknown".into());
+        prompt::path_item(self.name.trim_start_matches('/'), &project)
     }
     pub fn summary(&self) -> Summary<'_> {
         Summary {
@@ -190,7 +189,7 @@ pub fn select(containers: &[Container], interactive: bool) -> Result<&Container>
                 let names: Vec<_> = containers.iter().map(|c| c.name.trim_start_matches('/')).collect();
                 return Err(format!("multiple devcontainers found: {names:?}; specify --container NAME"));
             }
-            let labels = containers.iter().map(|c| format!("{} ({})", c.name.trim_start_matches('/'), c.local_folder().unwrap_or("workspace unknown"))).collect::<Vec<_>>();
+            let labels = containers.iter().map(Container::display_label).collect::<Vec<_>>();
             Ok(&containers[prompt::choose("Choose a devcontainer", &labels, interactive)?])
         }
     }

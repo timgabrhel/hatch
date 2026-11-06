@@ -132,7 +132,7 @@ pub fn folder(path: &Path, interactive: bool) -> Result<PathBuf> {
             .get("name")
             .and_then(|v| v.as_str())
             .unwrap_or("Folder");
-        labels.push(format!("{name} — {}", folder.display()));
+        labels.push(prompt::path_item(name, &prompt::local_path(&folder)));
         folders.push(folder);
     }
     let index = if folders.len() == 1 {
@@ -149,9 +149,40 @@ pub fn folder(path: &Path, interactive: bool) -> Result<PathBuf> {
     Ok(folders.remove(index))
 }
 
+fn empty_workspace(path: &Path) -> Result<bool> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("Workspace file: {e}"))?;
+    if text.trim().is_empty() {
+        return Ok(true);
+    }
+    let value = jsonc(&text)?;
+    Ok(value.is_object()
+        && match value.get("folders") {
+            None => true,
+            Some(serde_json::Value::Array(folders)) => folders.is_empty(),
+            _ => false,
+        })
+}
+
+fn create_empty_workspace(path: &Path) -> Result<()> {
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|e| {
+            format!("Could not create workspace file (existing files are never overwritten): {e}")
+        })?;
+    file.write_all(b"{\n  \"folders\": []\n}\n")
+        .map_err(|e| format!("Workspace file: {e}"))
+}
+
 pub fn choose(config: &Path) -> Result<PathBuf> {
     let inferred = provision::workspace(config, None).ok();
-    let mut roots = vec![config.parent().unwrap().to_owned()];
+    let mut roots = vec![std::env::current_dir().map_err(|e| format!("Current directory: {e}"))?];
+    let config_dir = config.parent().unwrap().to_owned();
+    if !roots.contains(&config_dir) {
+        roots.push(config_dir);
+    }
     if let Some(root) = &inferred {
         if !roots.contains(root) {
             roots.push(root.clone());
@@ -167,38 +198,77 @@ pub fn choose(config: &Path) -> Result<PathBuf> {
             .filter(|p| p.is_file() && p.extension().is_some_and(|e| e == "code-workspace"))
             .collect::<Vec<_>>();
         files.sort();
-        candidates.extend(files);
+        for file in files {
+            let file = file
+                .canonicalize()
+                .map_err(|e| format!("Workspace file: {e}"))?;
+            if !candidates.contains(&file) {
+                candidates.push(file);
+            }
+        }
     }
-    if let Some(root) = inferred {
-        candidates.push(root);
-    }
+    let create = if candidates.is_empty() {
+        inferred.as_ref().map(|root| {
+            root.join(format!(
+                "{}.code-workspace",
+                root.file_name().unwrap_or_default().to_string_lossy()
+            ))
+        })
+    } else {
+        None
+    };
     if candidates.is_empty() {
-        prompt::note("No workspace file was found beside this config. Paste a .code-workspace file or a project folder.");
+        prompt::note("No VS Code .code-workspace files found. Choose a project folder or paste a .code-workspace file path.");
+    }
+    if let Some(root) = &inferred {
+        candidates.push(root.clone());
     }
     loop {
         let mut labels = candidates
             .iter()
             .map(|p| {
-                format!(
-                    "{} — {}",
-                    if p.is_file() {
-                        "Workspace file"
-                    } else {
-                        "Detected project folder"
-                    },
-                    p.display()
-                )
+                if p.is_file() {
+                    prompt::path_item("VS Code workspace", &prompt::local_path(p))
+                } else {
+                    prompt::path_item("Detected project folder", &prompt::local_path(p))
+                }
             })
             .collect::<Vec<_>>();
+        let create_index = create.as_ref().map(|path| {
+            let index = labels.len();
+            labels.push(prompt::path_item(
+                "Create workspace file",
+                &prompt::local_path(path),
+            ));
+            index
+        });
+        let paste_index = labels.len();
         labels.extend([
-            "Paste a workspace file or folder path…".into(),
+            "Paste a .code-workspace file or folder path…".into(),
             "Back".into(),
         ]);
         let index = prompt::choose_default("Select a workspace", &labels, true, Some(0))?;
-        if index == candidates.len() + 1 {
+        if index == paste_index + 1 {
             return Err("cancelled; nothing launched".into());
         }
-        let path = if index == candidates.len() {
+        if Some(index) == create_index {
+            let path = create.as_ref().unwrap();
+            match create_empty_workspace(path) {
+                Ok(()) => {
+                    let root = inferred.as_ref().unwrap();
+                    prompt::section(
+                        "Workspace created",
+                        &[
+                            ("File", &prompt::local_path(path)),
+                            ("Folder", &prompt::local_path(root)),
+                        ],
+                    );
+                    return Ok(root.clone());
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        let path = if index == paste_index {
             let text = prompt::input("Workspace file or folder path")?;
             if text.is_empty() || text == "q" {
                 continue;
@@ -207,13 +277,38 @@ pub fn choose(config: &Path) -> Result<PathBuf> {
         } else {
             candidates[index].clone()
         };
-        match folder(&path, true) {
-            Ok(path) => {
-                prompt::section(
-                    "Workspace selected",
-                    &[("Folder", &path.display().to_string())],
-                );
-                return Ok(path);
+        let resolved = (|| {
+            if path.is_file()
+                && path.extension().is_some_and(|e| e == "code-workspace")
+                && empty_workspace(&path)?
+            {
+                if let Some(root) = &inferred {
+                    return Ok(root.clone());
+                }
+                prompt::note("This workspace file is empty. Choose the project folder to use; the file will stay empty.");
+                let text = prompt::input("Project folder path")?;
+                if text.is_empty() || text == "q" {
+                    return Err("cancelled; nothing launched".into());
+                }
+                let root = pasted_path(&text);
+                if !root.is_dir() {
+                    return Err("Choose an existing project folder".into());
+                }
+                return folder(&root, false);
+            }
+            folder(&path, true)
+        })();
+        match resolved {
+            Ok(root) => {
+                let file_label = path.is_file().then(|| prompt::local_path(&path));
+                let folder_label = prompt::local_path(&root);
+                let mut fields = Vec::new();
+                if let Some(file) = &file_label {
+                    fields.push(("File", file.as_str()));
+                }
+                fields.push(("Folder", folder_label.as_str()));
+                prompt::section("Workspace selected", &fields);
+                return Ok(root);
             }
             Err(error) if error.starts_with("cancelled") => continue,
             Err(error) => prompt::warning(&error),
@@ -224,6 +319,14 @@ pub fn choose(config: &Path) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn creating_workspace_never_overwrites_existing_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("project.code-workspace");
+        std::fs::write(&path, "existing sentinel").unwrap();
+        assert!(create_empty_workspace(&path).is_err());
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "existing sentinel");
+    }
     #[test]
     fn jsonc_preserves_strings_and_rejects_broken_input() {
         let v = jsonc(

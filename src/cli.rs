@@ -8,24 +8,20 @@ pub enum Agent {
     Claude,
     Copilot,
     Opencode,
-    #[value(alias = "agy")]
-    Antigravity,
     Cursor,
     Grok,
 }
 impl Agent {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 6] = [
         Self::Codex,
         Self::Claude,
         Self::Copilot,
         Self::Opencode,
-        Self::Antigravity,
         Self::Cursor,
         Self::Grok,
     ];
     pub fn key(self) -> &'static str {
         match self {
-            Self::Antigravity => "antigravity",
             Self::Cursor => "cursor",
             _ => self.executable(),
         }
@@ -36,7 +32,6 @@ impl Agent {
             Self::Claude => "Claude",
             Self::Copilot => "GitHub Copilot",
             Self::Opencode => "OpenCode",
-            Self::Antigravity => "Antigravity",
             Self::Cursor => "Cursor",
             Self::Grok => "Grok Build",
         }
@@ -49,7 +44,6 @@ impl Agent {
             Self::Codex => ".local/bin/codex",
             Self::Claude => ".local/bin/claude",
             Self::Copilot => ".local/bin/copilot",
-            Self::Antigravity => ".local/bin/agy",
             Self::Cursor => ".local/bin/cursor-agent",
         }
     }
@@ -59,7 +53,6 @@ impl Agent {
             Self::Claude => "claude",
             Self::Copilot => "copilot",
             Self::Opencode => "opencode",
-            Self::Antigravity => "agy",
             Self::Cursor => "cursor-agent",
             Self::Grok => "grok",
         }
@@ -71,7 +64,7 @@ impl Agent {
     name = "hatch",
     version,
     about = "Enter a devcontainer and launch a coding agent",
-    after_help = "Start here: hatch\nInside Herdr: opens a new workspace. Use --here to stay in this terminal.\nAdvanced settings: hatch options\nAgent choices: hatch agents\nPass agent arguments after --, e.g. hatch --agent claude -- 'Explain this repository'"
+    after_help = "Start here: hatch\nInside Herdr: opens a new workspace. Use --here to stay in this terminal.\nAdvanced settings: hatch options\nAgent choices: hatch inspect\nPass agent arguments after --, e.g. hatch --agent claude -- 'Explain this repository'"
 )]
 pub struct Cli {
     #[arg(skip)]
@@ -127,16 +120,33 @@ pub struct Cli {
     /// Disable interactive terminal features (for scripts; normally detected automatically).
     #[arg(hide = true, long, global = true)]
     pub no_tty: bool,
+    /// Select an existing Git worktree by its absolute container path.
+    #[arg(long, global = true)]
+    pub worktree: Option<String>,
+    /// Ask Codex or Claude to read this container-local initialization skill.
+    #[arg(long, global = true, conflicts_with = "setup_command")]
+    pub init_skill: Option<String>,
+    /// Explicit project setup shell command, run once before launching the agent.
+    #[arg(long, global = true)]
+    pub setup_command: Option<String>,
     #[command(subcommand)]
     pub command: Option<Action>,
 }
 
 #[derive(Clone, Debug, Subcommand)]
 pub enum Action {
+    /// List Git worktrees in the selected container without launching an agent.
+    Worktrees {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Create or remove a Git worktree in the selected container.
+    Worktree {
+        #[command(subcommand)]
+        command: WorktreeAction,
+    },
     /// Explain all settings, including advanced terminal and configuration options.
     Options,
-    /// Show supported agents and how to choose one.
-    Agents,
     /// Find, start or create a devcontainer from --config, then launch the agent.
     #[command(
         after_help = "Requires --config PATH. Uses the project's normal Dev Container lifecycle hooks.\nReuses a matching running container without rebuilding it or rerunning hooks."
@@ -153,14 +163,27 @@ pub enum Action {
         #[arg(long)]
         json: bool,
     },
-    /// Check agent executables, authentication, and persistence using the launch environment.
-    Doctor {
-        /// Print machine-readable JSON.
+}
+
+#[derive(Clone, Debug, Subcommand)]
+pub enum WorktreeAction {
+    /// Create a checkout. Without --from, --branch must already exist locally.
+    Create {
+        /// Absolute destination inside the container on an existing persistent mount.
+        path: String,
         #[arg(long)]
-        json: bool,
+        branch: String,
+        /// Create a new branch from this explicit local ref or commit (no fetch).
+        #[arg(long = "from")]
+        start: Option<String>,
     },
-    /// Choose a container, then an agent, and launch in its workspace.
-    Menu,
+    /// Remove a clean, unlocked linked worktree; always retain its branch.
+    Remove {
+        path: String,
+        /// Confirm removal, including that no session is using this checkout.
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 /// Split before clap sees the arguments: neither clap nor a shell may interpret

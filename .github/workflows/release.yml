@@ -15,8 +15,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --locked
-      - run: python3 scripts/package.py
-      - run: HATCH_TEST_BINARY=target/release/hatch python3 -m unittest discover -s tests -v
+      - run: cargo run --locked --example package
+      - run: HATCH_TEST_BINARY=target/release/hatch cargo test --locked --tests
       - uses: actions/upload-artifact@v4
         with:
           name: hatch-${{ runner.arch }}

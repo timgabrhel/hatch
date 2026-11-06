@@ -6,12 +6,14 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 binary=$root/hatch
 [ -f "$binary" ] || binary=$root/target/release/hatch
 with_resolver=false
+launch=true
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --prefix) prefix=$2; shift 2 ;;
         --bin) binary=$2; shift 2 ;;
         --with-resolver) with_resolver=true; shift ;;
-        *) echo "Usage: $0 [--prefix DIR] [--bin FILE] [--with-resolver]" >&2; exit 2 ;;
+        --no-launch) launch=false; shift ;;
+        *) echo "Usage: $0 [--prefix DIR] [--bin FILE] [--with-resolver] [--no-launch]" >&2; exit 2 ;;
     esac
 done
 case "$prefix" in /*) ;; *) echo '--prefix must be an absolute path' >&2; exit 2;; esac
@@ -43,3 +45,6 @@ cp "$binary" "$staged"
 chmod 755 "$staged"
 mv -f "$staged" "$prefix/bin/hatch"
 echo "Installed $prefix/bin/hatch. Ensure $prefix/bin is on PATH. cf was not changed."
+if "$launch"; then
+    exec "$prefix/bin/hatch"
+fi

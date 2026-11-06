@@ -1,9 +1,14 @@
 {
   "name": "Hatch development",
-  "build": {
-    "dockerfile": "Dockerfile"
-  },
+  "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+  "runArgs": ["--name=hatch-dev"],
+  "mounts": [
+    "source=${localEnv:HOME}/.codex/auth.json,target=/home/vscode/.codex/auth.json,type=bind,readonly",
+    "source=${localEnv:HOME}/.claude/.credentials.json,target=/home/vscode/.claude/.credentials.json,type=bind,readonly",
+    "source=${localEnv:HOME}/.config/gh/hosts.yml,target=/home/vscode/.config/gh/hosts.yml,type=bind,readonly"
+  ],
   "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/devcontainers/features/node:2": {
       "version": "22",
       "nodeGypDependencies": false,
@@ -17,7 +22,9 @@
   "remoteEnv": {
     "PATH": "${containerWorkspaceFolder}/tooling/node_modules/.bin:${containerEnv:PATH}"
   },
+  "onCreateCommand": ["sudo", "chown", "vscode:vscode", "/home/vscode/.codex", "/home/vscode/.claude", "/home/vscode/.config/gh"],
   "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "gh auth setup-git",
   "customizations": {
     "vscode": {
       "extensions": [
