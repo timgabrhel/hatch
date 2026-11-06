@@ -1,24 +1,100 @@
-name: Release artifacts
+name: Hatch — Build release
 on:
-  workflow_dispatch:
   push:
     tags: ['v*']
+  pull_request:
+    paths:
+      - src/**
+      - tests/**
+      - scripts/install.sh
+      - examples/package.rs
+      - tools/release/**
+      - Cargo.toml
+      - Cargo.lock
+      - .github/workflows/**
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish after validation (select a version tag; branches only build artifacts)
+        type: boolean
+        default: false
 permissions:
   contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+  queue: max
 jobs:
-  package:
+  validate:
+    uses: ./.github/workflows/check.yml
+  build:
+    name: Build and test ${{ matrix.target }}
+    needs: validate
     strategy:
+      fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        include:
+          - target: linux-x86_64
+            runner: ubuntu-24.04
+          - target: linux-aarch64
+            runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test --locked
+      - name: Validate release version
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+        run: python3 tools/release/version.py check
       - run: cargo run --locked --example package
       - run: HATCH_TEST_BINARY=target/release/hatch cargo test --locked --tests
-      - uses: actions/upload-artifact@v4
+      - name: Test archive installation outside the checkout
+        run: python3 tools/release/smoke.py
+      - uses: actions/upload-artifact@v6
         with:
-          name: hatch-${{ runner.arch }}
-          path: dist/*
+          name: hatch-${{ matrix.target }}
+          path: |
+            dist/hatch-*.tar.gz
+            dist/hatch-*.sha256
           if-no-files-found: error
+          retention-days: 14
+  release:
+    name: Publish after all platforms pass
+    if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish))
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: hatch-*
+          path: release-assets
+          merge-multiple: true
+      - name: Create or update draft, then publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$draft" != true ]; then
+              echo 'Refusing to replace assets on a published release.' >&2
+              exit 1
+            fi
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          else
+            cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
+          Hatch for Linux x86_64 and ARM64. Run on your Docker host.
+
+          ```sh
+          curl -fsSL https://raw.githubusercontent.com/timgabrhel/hatch/main/scripts/install.sh | sh
+          ```
+
+          The installer detects your architecture, verifies the archive, and offers PATH and resolver setup.
+          Existing installations: run `hatch update`.
+          NOTES
+            gh release create "$RELEASE_TAG" release-assets/* --draft --verify-tag \
+              --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi
+          gh release edit "$RELEASE_TAG" --title "$RELEASE_TAG" --draft=false --latest

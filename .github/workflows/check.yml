@@ -1,5 +1,8 @@
 name: Check
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -10,6 +13,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - run: python3 -m unittest discover -s tools/release -p 'test_*.py'
+      - run: python3 tools/release/version.py check
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked

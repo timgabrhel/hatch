@@ -3,3 +3,6 @@
 /dist/
 /tooling/node_modules/
 /tmp/
+
+# Release-tool Python cache
+__pycache__/

@@ -1,0 +1,139 @@
+name: Hatch — Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version increment (ignored when an explicit version is provided)
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      version:
+        description: Optional exact version, e.g. 0.2.0 or v0.2.0
+        type: string
+        default: ''
+  push:
+    branches: [main]
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-release-management
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  prepare:
+    name: Prepare, validate, and merge release PR
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    outputs:
+      merge_sha: ${{ steps.complete.outputs.merge_sha }}
+      base_sha: ${{ steps.pr.outputs.base_sha }}
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Select and update version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+          VERSION: ${{ inputs.version }}
+        run: python3 tools/release/version.py prepare
+      - name: Check version and lockfile consistency
+        run: |
+          python3 tools/release/version.py check
+          cargo metadata --locked --format-version 1 > /dev/null
+      - name: Push release branch and open PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          branch="release/$RELEASE_TAG"
+          # Never overwrite an existing release preparation or its human edits.
+          if git ls-remote --exit-code --heads origin "$branch"; then
+            echo "Branch $branch already exists. Use its PR, or remove it before retrying." >&2
+            exit 1
+          fi
+          echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git switch -c "$branch"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Cargo.toml Cargo.lock
+          git commit -m "chore(release): prepare $RELEASE_TAG"
+          git push origin "$branch"
+          cat > "$RUNNER_TEMP/release-pr.md" <<'BODY'
+          Prepare the standalone CLI release by updating Cargo.toml and Cargo.lock; the CLI version is derived from Cargo.
+
+          Click Approve workflows to run on this PR. The release workflow waits up to 30 minutes
+          for approval and successful required checks, then merges this PR if repository rules allow.
+          No separate merge click is needed. All platform builds and smoke tests gate publication.
+          BODY
+          url=$(gh pr create --base main --head "$branch" --title "chore(release): prepare $RELEASE_TAG" \
+            --body-file "$RUNNER_TEMP/release-pr.md")
+          echo "Release PR: $url — approve workflows to run here within 30 minutes." >> "$GITHUB_STEP_SUMMARY"
+          echo "number=$(gh pr view "$url" --json number --jq .number)" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Wait for approved checks and merge validated release PR
+        id: complete
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PR: ${{ steps.pr.outputs.number }}
+          RELEASE_BRANCH: release/${{ steps.version.outputs.tag }}
+          RELEASE_SHA: ${{ steps.pr.outputs.head_sha }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: python3 tools/release/complete.py
+
+  tag:
+    name: Tag merged version and start release build
+    env:
+      RELEASE_SHA: ${{ needs.prepare.outputs.merge_sha || github.sha }}
+    needs: prepare
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.prepare.result == 'success') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check merged version change
+        id: version
+        env:
+          BEFORE_SHA: ${{ needs.prepare.outputs.base_sha || github.event.before }}
+        run: python3 tools/release/version.py merged
+      - name: Create immutable tag and dispatch release
+        if: steps.version.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            if [ "$(git rev-parse "$RELEASE_TAG^{commit}")" != "$RELEASE_SHA" ]; then
+              echo 'Existing tag points to a different commit; refusing to move it.' >&2
+              exit 1
+            fi
+          else
+            git tag "$RELEASE_TAG" "$RELEASE_SHA"
+            git push origin "refs/tags/$RELEASE_TAG"
+          fi
+          # GITHUB_TOKEN merges and tag pushes do not trigger push workflows. Dispatch explicitly.
+          gh workflow run release.yml --ref "$RELEASE_TAG" -f publish=true
+          echo "Dispatched standalone build and publication for $RELEASE_TAG ($RELEASE_SHA)." >> "$GITHUB_STEP_SUMMARY"
