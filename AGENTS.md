@@ -1,7 +1,8 @@
 # Working on Hatch
 
 Read `DESIGN.md` for requirements, implementation status, and deferred decisions.
-Use `README.md` for the public command contract. Keep both aligned with changes.
+Use `README.md` for the public command overview and `docs/cli.md` for the full
+command contract. Keep the relevant guides in `docs/` and `DESIGN.md` aligned with changes.
 
 ## Development
 
@@ -23,6 +24,18 @@ For release-binary process tests, set `HATCH_TEST_BINARY=target/release/hatch` a
 `cargo build --release --locked`, then run `cargo test --locked --tests`.
 `cargo run --locked --example package` builds a native archive in `dist/`, using GNU
 tar, gzip, and sha256sum. Build products and local dependency installations are ignored.
+
+## Commits
+
+- Use Conventional Commits: `type(scope): short imperative summary`.
+- Choose a clear type such as `feat`, `fix`, `docs`, `refactor`, `test`, or `ci`;
+  include a scope when it helps identify the affected area.
+- Keep the subject concise, preferably within 72 characters, without a trailing period.
+- Separate independently reviewable changes into focused commits. Keep implementation,
+  tests, and directly related documentation together when practical.
+- After a blank line, use short `-` bullets for the concrete changes and relevant
+  validation. Do not write paragraph-style commit bodies.
+- Mark breaking changes with `!` and a `BREAKING CHANGE:` footer when applicable.
 
 ## Code map
 
