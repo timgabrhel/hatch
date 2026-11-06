@@ -138,6 +138,9 @@ The archive includes the binary, installer, resolver lockfile, README, `docs/` g
 `DESIGN.md`, `AGENTS.md`, and dependency license notices. These are native GNU/Linux
 builds, not universal static binaries.
 
+The **Hatch — Validate code** workflow runs formatting, Clippy, Rust and release-helper
+tests, and a build. Release builds reuse that validation before packaging.
+
 ## Releases
 
 Run **Hatch — Prepare release** on `main`, choosing `patch` (default), `minor`, `major`,
