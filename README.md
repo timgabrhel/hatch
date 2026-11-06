@@ -23,34 +23,19 @@ and agent directly. Supports Linux `x86_64` (Intel/AMD) and `aarch64` (ARM64).
 curl -fsSL https://raw.githubusercontent.com/timgabrhel/hatch/main/scripts/install.sh | sh
 ```
 
-Installs the latest GitHub release, detects PATH setup, and offers any missing
-resolver setup. See [installation](docs/installation.md) for details.
-Update anytime with `hatch update`.
-
 ### Choose how to launch
 
-**Interactive:** run Hatch and follow the menus.
+**Interactive:**
 
 ```sh
 hatch
 ```
 
-Choose a container, agent, and checkout. Inside Herdr, choose a destination too.
-The **Your session** review offers **Confirm and launch**, or **Install Agent & Launch**
-if the agent is missing. Escape goes back. Container startup and worktree changes
-have their own confirmations. See the [guided launch walkthrough](docs/usage.md).
-
-**Direct CLI:** specify the target and agent, skip Hatch's prompts, and launch in
-this terminal.
+**Direct CLI:**
 
 ```sh
 hatch --container my-devcontainer --agent claude --no-input --here
 ```
-
-Replace `my-devcontainer` with a running container's name or ID. Add `--install` to
-allow installation if the agent is missing. `--no-input` skips Hatch's menus and review;
-the agent can still be interactive. Omit it to keep checkout selection and final review.
-`--here` keeps the current terminal, including inside Herdr.
 
 ### Start a container or pass agent arguments
 
