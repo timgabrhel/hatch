@@ -835,38 +835,18 @@ fn herdr_rejects_non_utf8_before_creating_anything() {
         .all(|c| *c == json!(["workspace", "list"])));
 }
 #[test]
-fn automatic_herdr_menu_selects_destination_without_child_recursion() {
+fn default_herdr_launch_opens_agent_here_without_destination_menu() {
     let mut h = Harness::new();
     h.herdr();
-    let t = h.menu(&strings(&[]), &answers(&["1", "5", "1"]), 0);
-    assert_eq!(t.matches("Open agent in Herdr").count(), 1);
-    let summary = t.split("Your session").last().unwrap();
-    contains(summary, "Installed");
-    assert!(!summary.contains("reinstall the agent"));
-    assert!(!summary.contains("Install now?"));
-    assert_eq!(
-        h.herdr_calls()
-            .iter()
-            .filter(|c| c[0] == "workspace" && c[1] == "create")
-            .count(),
-        1
-    );
-    let cmd = handoff(&h);
-    let argv = parse_handoff(&h, &cmd);
-    assert_eq!(
-        argv[argv.iter().position(|a| a == "--agent").unwrap() + 1],
-        "cursor"
-    );
-    assert!(argv.contains(&"--here".into()));
-    h.no_launch();
-    let before = h.herdr_calls().len();
-    std::os::unix::fs::symlink("/usr/bin/env", h.path("env")).unwrap();
-    let mut c = h.command("/bin/sh");
-    c.args(["-c", &cmd]);
-    h.execute(&mut c, b"", 0);
-    assert_eq!(h.herdr_calls().len(), before);
+    let output = h.menu(&strings(&[]), &answers(&["1", "5"]), 0);
+    assert!(!output.contains("Open agent in Herdr"));
+    assert!(!output.contains("Herdr:"));
+    contains(&output, "CLI equivalent");
+    contains(&output, "--here");
+    assert!(h.herdr_calls().is_empty());
     assert_eq!(last(&h).last().unwrap(), "cursor-agent");
 }
+
 #[test]
 fn here_and_piped_input_stay_in_current_terminal() {
     let mut h = Harness::new();
@@ -886,30 +866,26 @@ fn combined_install_and_launch_follows_herdr_selection_and_review() {
         let mut h = Harness::new();
         h.herdr();
         h.set("HATCH_TEST_MODE", "needs-install");
-        let mut p = h.pty(&strings(&["--container", "alpha-dev", "--agent", "codex"]));
-        p.expect("Open agent in Herdr");
-        p.expect(PROMPT);
-        assert!(!p.output.contains("Install now?"));
-        assert!(!p.output.contains("For availability after rebuilds"));
-        p.send(b"1\n");
+        let mut p = h.pty(&strings(&[
+            "--container",
+            "alpha-dev",
+            "--agent",
+            "codex",
+            "--herdr",
+        ]));
         p.expect("Your session");
         p.expect("Install Agent & Launch");
         p.expect(PROMPT);
-        assert!(
-            p.output.find("Open agent in Herdr").unwrap() < p.output.find("Your session").unwrap()
-        );
         assert!(!p.output.contains("Install now?"));
         assert!(!p.output.contains("Container selected"));
         assert!(!p.output.contains("Agent not installed"));
         contains(&p.output, "! Install");
         assert!(!p.output.contains("reinstall the agent"));
-        assert!(h.herdr_calls().is_empty());
+        assert!(h
+            .herdr_calls()
+            .iter()
+            .all(|c| *c == json!(["workspace", "list"])));
         p.send(answer);
-        if status == 1 {
-            p.expect("Open agent in Herdr");
-            p.expect(PROMPT);
-            p.send(b"\x1b");
-        }
         let output = p.finish_with_review(status);
         if status == 0 {
             let summary = output.split("Your session").last().unwrap();
@@ -919,7 +895,10 @@ fn combined_install_and_launch_follows_herdr_selection_and_review() {
             assert!(!summary.contains("reinstall the agent"));
         }
         if status == 1 {
-            assert!(h.herdr_calls().is_empty());
+            assert!(h
+                .herdr_calls()
+                .iter()
+                .all(|c| *c == json!(["workspace", "list"])));
         } else {
             let argv = parse_handoff(&h, &handoff(&h));
             assert!(argv.contains(&"--no-input".into()));
@@ -945,19 +924,13 @@ fn review_back_clears_wrapped_summary_and_does_not_accumulate_copies() {
         let mut p = h.pty(&strings(&[
             "--container",
             "alpha-dev",
-            "--agent",
-            "codex",
             "--",
             &"long argument ".repeat(15),
         ]));
         p.resize(40, 80);
-        p.expect("Open agent in Herdr");
+        p.expect("Select an agent");
         for _ in 0..2 {
-            p.expect(if plain {
-                PROMPT
-            } else {
-                "This workspace (new tab)"
-            });
+            p.expect(if plain { PROMPT } else { "Grok Build" });
             p.send(b"\r");
             p.expect("Launch this session?");
             p.expect(if plain {
@@ -971,7 +944,7 @@ fn review_back_clears_wrapped_summary_and_does_not_accumulate_copies() {
             }
             let before_back = p.output.len();
             p.send(b"\x1b");
-            p.expect("Open agent in Herdr");
+            p.expect("Select an agent");
             if !plain {
                 // Clearing must include the summary and its wrapped argument,
                 // not merely the three rows of the confirmation menu.
@@ -987,11 +960,7 @@ fn review_back_clears_wrapped_summary_and_does_not_accumulate_copies() {
                 );
             }
         }
-        p.expect(if plain {
-            PROMPT
-        } else {
-            "This workspace (new tab)"
-        });
+        p.expect(if plain { PROMPT } else { "Grok Build" });
         p.send(b"\x1b");
         p.finish(1);
         assert!(h
@@ -999,7 +968,10 @@ fn review_back_clears_wrapped_summary_and_does_not_accumulate_copies() {
             .iter()
             .all(|c| !c.has("hatch-install") || c.args.last().unwrap() != "install"));
         h.no_launch();
-        assert!(h.herdr_calls().is_empty());
+        assert!(h
+            .herdr_calls()
+            .iter()
+            .all(|c| *c == json!(["workspace", "list"])));
     }
 }
 #[test]
@@ -1021,6 +993,7 @@ fn session_review_gates_install_setup_and_herdr_handoff() {
                 "--agent",
                 "codex",
                 "--install",
+                "--herdr",
                 "--workspace",
                 h.dir.path().to_str().unwrap(),
                 "--setup-command",
@@ -1028,13 +1001,6 @@ fn session_review_gates_install_setup_and_herdr_handoff() {
                 "--",
                 "--version",
             ]));
-            p.expect("Open agent in Herdr");
-            p.expect(if plain {
-                PROMPT
-            } else {
-                "This workspace (new tab)"
-            });
-            p.send(b"\r");
             p.expect("Your session");
             p.expect("Launch this session?");
             p.expect(if plain {
@@ -1050,7 +1016,10 @@ fn session_review_gates_install_setup_and_herdr_handoff() {
             assert!(h.calls().iter().all(|c| !(c.has("hatch-install")
                 && c.args.last().unwrap() == "install")
                 && !c.has("hatch-project-setup")));
-            assert!(h.herdr_calls().is_empty());
+            assert!(h
+                .herdr_calls()
+                .iter()
+                .all(|c| *c == json!(["workspace", "list"])));
             h.no_launch();
             if confirm {
                 p.send(if plain { b"1\r" } else { b"\r" });
@@ -1066,25 +1035,21 @@ fn session_review_gates_install_setup_and_herdr_handoff() {
                     .any(|c| c[0] == "pane" && c[1] == "run"));
             } else {
                 p.send(b"\x1b");
-                p.expect("Open agent in Herdr");
-                p.expect(if plain {
-                    PROMPT
-                } else {
-                    "This workspace (new tab)"
-                });
-                p.send(b"\x1b");
                 p.finish(1);
                 assert!(h.calls().iter().all(|c| !(c.has("hatch-install")
                     && c.args.last().unwrap() == "install")
                     && !c.has("hatch-project-setup")));
-                assert!(h.herdr_calls().is_empty());
+                assert!(h
+                    .herdr_calls()
+                    .iter()
+                    .all(|c| *c == json!(["workspace", "list"])));
                 h.no_launch();
             }
         }
     }
 }
 #[test]
-fn cancelling_destination_never_requests_or_runs_installation() {
+fn cancelling_review_never_requests_or_runs_installation() {
     for consent_flag in [false, true] {
         let mut h = Harness::new();
         h.herdr();
@@ -1094,7 +1059,7 @@ fn cancelling_destination_never_requests_or_runs_installation() {
             args.push("--install".into());
         }
         let mut p = h.pty(&args);
-        p.expect("Open agent in Herdr");
+        p.expect("Launch this session?");
         p.expect(PROMPT);
         assert!(!p.output.contains("Install now?"));
         assert!(h
@@ -1108,7 +1073,10 @@ fn cancelling_destination_never_requests_or_runs_installation() {
             .iter()
             .all(|c| !c.has("hatch-install") || c.args.last().unwrap() != "install"));
         h.no_launch();
-        assert!(h.herdr_calls().is_empty());
+        assert!(h
+            .herdr_calls()
+            .iter()
+            .all(|c| *c == json!(["workspace", "list"])));
     }
 }
 #[test]
@@ -1123,7 +1091,10 @@ fn failed_install_does_not_open_herdr() {
         h.herdr();
         h.set("HATCH_TEST_MODE", mode);
         h.run(&["--container", "alpha-dev", "--herdr", "--install"], 1);
-        assert!(h.herdr_calls().is_empty());
+        assert!(h
+            .herdr_calls()
+            .iter()
+            .all(|c| *c == json!(["workspace", "list"])));
     }
 }
 #[test]
@@ -1662,18 +1633,23 @@ fn herdr_current_workspace_choice_follows_up_and_creates_only_a_fresh_tab() {
         h.path("herdr.log.state"),
         &json!({"workspaces":[{"workspace_id":"current-workspace"}],"tabs":0}),
     );
-    let mut p = h.pty(&append(&args, &["up"]));
+    let mut p = h.pty(&append(
+        &args,
+        &["up", "--herdr-workspace", "current-workspace"],
+    ));
     p.expect("Select an agent");
     p.expect(PROMPT);
     p.send(b"2\n");
-    p.expect("Open agent in Herdr");
+    p.expect("Launch this session?");
     p.expect(PROMPT);
-    assert!(h.herdr_calls().is_empty());
+    assert!(h
+        .herdr_calls()
+        .iter()
+        .all(|c| *c == json!(["workspace", "list"])));
     assert_eq!(h.resolver_calls()[0][0], "up");
     h.no_launch();
-    p.send(b"2\n");
     let t = p.finish_with_review(0);
-    assert_eq!(t.matches("Open agent in Herdr").count(), 1);
+    assert_eq!(t.matches("Open agent in Herdr").count(), 0);
     assert!(!t.contains("Startup runs this project's build"));
     let calls = h.herdr_calls();
     assert!(!calls
@@ -1698,16 +1674,275 @@ fn herdr_current_workspace_choice_follows_up_and_creates_only_a_fresh_tab() {
 }
 
 #[test]
-fn herdr_destination_cancel_or_missing_current_id_creates_nothing() {
-    for choice in ["q", "2"] {
+fn default_herdr_review_cancellation_never_creates_terminals() {
+    for choice in ["q", "1"] {
         let mut h = Harness::new();
         h.herdr();
         h.menu(
             &strings(&["--container", "alpha-dev", "--agent", "codex"]),
             &answers(&[choice]),
-            1,
+            if choice == "q" { 1 } else { 0 },
+        );
+        assert!(h
+            .herdr_calls()
+            .iter()
+            .all(|c| *c == json!(["workspace", "list"])));
+        if choice == "q" {
+            h.no_launch();
+        } else {
+            assert_eq!(last(&h).last().unwrap(), "codex");
+        }
+    }
+}
+
+fn core_fixture(executable: &str) -> Harness {
+    let mut h = Harness::new();
+    h.herdr(); // Also install legacy Herdr: Core must take precedence.
+    h.tool(executable);
+    h.set("HC_TERMINAL_ID", "t9");
+    h.set("HATCH_TEST_CORE_LOG", h.path("core.log"));
+    h
+}
+
+#[test]
+fn core_detects_desktop_and_forwards_exact_arguments_after_review() {
+    for executable in ["hc", "herdr-core"] {
+        let mut h = core_fixture(executable);
+        h.set("HERDR_ENV", "");
+        let args = strings(&[
+            "--container",
+            "alpha-dev",
+            "--agent",
+            "claude",
+            "--herdr",
+            "--",
+            "",
+            "a b'\";$(false)",
+        ]);
+        let mut p = h.pty(&args);
+        p.expect("CLI equivalent");
+        assert!(!rows(h.path("core.log"))
+            .iter()
+            .any(|c| c[0] == "run" && c[1] != "--help"));
+        let output = p.finish_with_review(0);
+        contains(&output, "New Core session (open here)");
+        contains(&output, "terminal t10 (detached)");
+        contains(
+            &output,
+            &format!("Open this session: {executable} attach t10"),
+        );
+        contains(&output, "fixture Core attached");
+        let calls = rows(h.path("core.log"));
+        assert_eq!(calls.iter().filter(|c| c[0] == "attach").count(), 1);
+        let run = calls
+            .iter()
+            .find(|c| c[0] == "run" && c[1] != "--help")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        let args = run.iter().map(|v| v.as_str().unwrap()).collect::<Vec<_>>();
+        assert!(args.contains(&"--bg"));
+        assert!(args.contains(&"--no-parent"));
+        assert!(args.contains(&"--no-notify"));
+        assert!(args.contains(&"--here"));
+        assert!(args.contains(&"--no-input"));
+        assert!(!args.contains(&"--install"));
+        assert_eq!(&args[args.len() - 2..], &["", "a b'\";$(false)"]);
+        assert!(h.herdr_calls().is_empty());
+        assert!(!h
+            .calls()
+            .iter()
+            .any(|c| c.args.starts_with(&strings(&["exec", "-i"]))));
+    }
+}
+
+#[test]
+fn core_here_choice_and_explicit_here_launch_locally() {
+    for here in [false, true] {
+        let h = core_fixture("hc");
+        let mut args = strings(&["--container", "alpha-dev", "--agent", "codex"]);
+        if here {
+            args.push("--here".into());
+        }
+        h.menu(&args, &[], 0);
+        assert!(!rows(h.path("core.log"))
+            .iter()
+            .any(|c| c[0] == "run" && c[1] != "--help"));
+        assert!(h.herdr_calls().is_empty());
+        assert_eq!(last(&h).last().unwrap(), "codex");
+    }
+}
+
+#[test]
+fn core_failure_never_retries_or_launches_locally() {
+    for mode in ["failure", "malformed", "finished"] {
+        let mut h = core_fixture("hc");
+        h.set("HATCH_TEST_CORE_MODE", mode);
+        h.run(&["--container", "alpha-dev", "--herdr", "--no-input"], 1);
+        assert_eq!(
+            rows(h.path("core.log"))
+                .iter()
+                .filter(|c| c[0] == "run" && c[1] != "--help")
+                .count(),
+            1
         );
         assert!(h.herdr_calls().is_empty());
-        h.no_launch();
+        assert!(!h
+            .calls()
+            .iter()
+            .any(|c| c.args.starts_with(&strings(&["exec", "-i"]))));
+    }
+}
+
+#[test]
+fn core_rejects_workspace_and_non_utf8_before_creating_terminal() {
+    let h = core_fixture("hc");
+    h.run(
+        &[
+            "--container",
+            "alpha-dev",
+            "--herdr-workspace",
+            "w1",
+            "--no-input",
+        ],
+        1,
+    );
+    assert!(!rows(h.path("core.log"))
+        .iter()
+        .any(|c| c[0] == "run" && c[1] != "--help"));
+    let mut args = strings(&["--container", "alpha-dev", "--herdr", "--no-input", "--"]);
+    args.push(OsString::from_vec(vec![255]));
+    h.run_os(&args, b"", 1);
+    assert!(!rows(h.path("core.log"))
+        .iter()
+        .any(|c| c[0] == "run" && c[1] != "--help"));
+    assert!(h.herdr_calls().is_empty());
+}
+
+#[test]
+fn core_unavailable_capabilities_are_resolved_before_review() {
+    for mode in ["unavailable", "old-cli"] {
+        let mut h = core_fixture("hc");
+        h.set("HATCH_TEST_CORE_MODE", mode);
+        let mut p = h.pty(&strings(&[
+            "--container",
+            "alpha-dev",
+            "--agent",
+            "codex",
+            "--herdr",
+        ]));
+        p.expect("Launch this session?");
+        assert!(!p.output.contains("Herdr:"));
+        assert!(!p.output.contains("Open agent in Herdr"));
+        assert!(!p.output.contains("New Core terminal"));
+        p.finish_with_review(0);
+        assert!(!rows(h.path("core.log"))
+            .iter()
+            .any(|c| c[0] == "run" && c[1] != "--help"));
+        assert!(h.herdr_calls().is_empty());
+        assert_eq!(last(&h).last().unwrap(), "codex");
+    }
+}
+
+#[test]
+fn stale_legacy_workspace_does_not_affect_default_local_launch() {
+    let mut h = Harness::new();
+    h.herdr();
+    h.set("HERDR_WORKSPACE_ID", "gone");
+    let output = h.menu(
+        &strings(&["--container", "alpha-dev", "--agent", "codex"]),
+        &[],
+        0,
+    );
+    assert!(!output.contains("Open agent in Herdr"));
+    assert!(h.herdr_calls().is_empty());
+    assert_eq!(last(&h).last().unwrap(), "codex");
+}
+
+#[test]
+fn core_failure_after_review_does_not_change_the_selected_destination() {
+    let h = core_fixture("hc");
+    let mut p = h.pty(&strings(&[
+        "--container",
+        "alpha-dev",
+        "--agent",
+        "codex",
+        "--herdr",
+    ]));
+    p.expect("Launch this session?");
+    p.expect(PROMPT);
+    // Remove only the disposable CLI after capability detection, before launch.
+    fs::remove_file(h.path("hc")).unwrap();
+    h.tool("herdr-core");
+    p.send(b"1\n");
+    p.finish(1);
+    assert!(h.herdr_calls().is_empty());
+    assert!(!rows(h.path("core.log"))
+        .iter()
+        .any(|c| c[0] == "run" && c[1] != "--help"));
+    h.no_launch();
+}
+
+#[test]
+fn herdr_child_uses_parent_tool_path_instead_of_terminal_server_path() {
+    for core in [false, true] {
+        let mut h = if core {
+            core_fixture("hc")
+        } else {
+            let mut h = Harness::new();
+            h.herdr();
+            h
+        };
+        let args = h.provision(true);
+        h.edit_fixture(|v| v[0]["Mounts"][0]["Destination"] = json!("/custom/project"));
+        // Relative PATH entries must keep their meaning after the terminal cwd changes.
+        h.set("PATH", ".");
+        let args = if core {
+            append(&args, &["--devcontainer-cli", "./devcontainer"])
+        } else {
+            args
+        };
+        h.run_os(
+            &append(
+                &args,
+                &["--container", "alpha-dev", "--herdr", "--no-input"],
+            ),
+            b"",
+            0,
+        );
+        let child: Vec<String> = if core {
+            let calls = rows(h.path("core.log"));
+            let run = calls
+                .iter()
+                .find(|c| c[0] == "run" && c[1] != "--help")
+                .unwrap()
+                .as_array()
+                .unwrap();
+            let delimiter = run.iter().position(|arg| arg == "--").unwrap();
+            run[delimiter + 1..]
+                .iter()
+                .map(|arg| arg.as_str().unwrap().to_owned())
+                .collect()
+        } else {
+            parse_handoff(&h, &handoff(&h))
+        };
+        fs::create_dir(h.path("server-bin")).unwrap();
+        fs::create_dir(h.path("other-cwd")).unwrap();
+        // Run the actual child argv using only disposable Docker/resolver fixtures.
+        // The stale server PATH intentionally contains no host tools.
+        let mut command = h.command("/usr/bin/env");
+        command
+            .args(&child[1..])
+            .env("PATH", h.path("server-bin"))
+            .current_dir(h.path("other-cwd"));
+        h.execute(&mut command, b"", 0);
+        assert!(
+            h.resolver_calls()
+                .iter()
+                .filter(|c| c[0] == "read-configuration")
+                .count()
+                >= 2
+        );
+        assert_eq!(last(&h).last().unwrap(), "codex");
     }
 }

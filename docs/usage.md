@@ -6,7 +6,7 @@
 hatch
 ```
 
-Hatch guides you through **container → agent → checkout → destination → review**,
+Hatch guides you through **container → agent → checkout → review**,
 skipping steps that do not apply. The container picker appears even with one running
 container. Choose **New from devcontainer.json…** to start from a project config.
 
@@ -33,19 +33,20 @@ Multi-folder files prompt for a folder. Empty workspace files use the inferred r
 Hatch only creates a workspace file when you select the explicit create action.
 See [configuration](configuration.md) for discovery and remote Docker details.
 
-## Agent, checkout, and destination
+## Agent and checkout
 
 The agent picker shows availability. Missing agents can be installed as part of launch.
 For Git projects, choose the current checkout, an existing worktree, or an explicit
 create/remove action. Initialization is optional. See [agents](agents.md) and
 [worktrees](worktrees.md).
 
-Inside Herdr, the final destination choice is **New workspace** or **This workspace
-(new tab)**. `--here` keeps the current terminal. See [Herdr](herdr.md).
+The agent opens in your current terminal, including inside Herdr/Core. There is no
+window/tab destination choice. Explicit Herdr CLI options remain available for advanced
+workflows; see [Herdr](herdr.md).
 
 ## Review and launch
 
-**Your session** summarizes the target, agent, destination, arguments, and initialization:
+**Your session** summarizes the target, agent, arguments, and initialization:
 skipped setup, a command to run, or the agent and skill path selected.
 Choose **Confirm and launch**, or **Install Agent & Launch** when the agent is missing.
 Escape returns to the preceding choice; menus have no Back rows. Installation, setup, and terminal handoff wait for this
@@ -63,3 +64,5 @@ when a menu closes.
 | `NO_COLOR` | No color. |
 | `--no-input` | No Hatch prompts or review; required choices must be explicit. |
 | `--no-tty` | No Docker terminal allocation; Hatch prompts are controlled separately. |
+
+The accepted session summary and CLI equivalent remain in the terminal transcript.

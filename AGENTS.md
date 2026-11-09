@@ -60,12 +60,15 @@ tar, gzip, and sha256sum. Build products and local dependency installations are 
   no persistent Hatch process, daemon, or polling loop.
 - Prepare the agent before creating a Herdr terminal. Child handoffs carry explicit
   target/agent inputs, `--here`, and `--no-input` to prevent recursion and repeat prompts.
-- In Herdr, prompt for new workspace or this workspace (new tab) as the last choice before review,
-  after container startup and checkout selection. Show installation required in the Your session
-  summary and use Install Agent & Launch as its final action for missing agents.
-  Available agents use Confirm and launch; do not show a separate install prompt. Setup and handoff also
-  wait for confirmation. Escape revisits choices; do not add Back menu items. --no-input skips review.
-  Read the current ID from HERDR_WORKSPACE_ID; explicit destination flags bypass.
+- Normal launch always uses the current terminal, including inside Herdr/Core.
+  Do not add a new-window/current-window destination prompt or automatically create terminals.
+  Show installation required in Your session and use Install Agent & Launch for missing
+  agents; available agents use Confirm and launch. Installation, setup, and explicit
+  handoffs wait for confirmation; --no-input skips review. Escape revisits earlier choices.
+  Retain explicit --herdr/--herdr-workspace CLI compatibility. Core uses HC_TERMINAL_ID,
+  takes precedence over legacy markers, and cannot select desktop workspaces. Explicit
+  Core launches create an independent session, then exec hc attach when stdin/stdout are
+  terminals and --no-tty is absent; nonterminal launches print the attach command.
 - Detect prerequisites and install only in the selected container as its intended user.
   Do not copy host credentials or agent state, or silently edit devcontainer configuration.
   Explicit exception: this repository's devcontainer exposes the three user-requested

@@ -223,112 +223,84 @@ fn run(mut cli: Cli, mut tail: Vec<OsString>) -> Result<()> {
         worktrees::check_options(&cli, &tail)?;
         configuration::prepare_env(&mut context)?;
         let agent_plan = install::prepare(&cli, &context)?;
-        let before_destination = cli.clone();
-        loop {
-            if let Err(error) = herdr::choose_destination(&mut cli) {
-                if guided && error.starts_with("cancelled") {
-                    if checkout_shown {
-                        cli = before_checkout;
-                        checkout_back = Some(selected);
-                        continue 'selection;
-                    }
-                    if !cli.agent_explicit && cli.agent_path.is_none() {
-                        previous = Some((selected, cli.clone()));
-                        cli = initial_cli.clone();
-                        continue 'selection;
-                    }
-                    if initial_cli.container.is_none() && initial_cli.config.is_none() {
-                        cli = initial_cli.clone();
-                        continue 'selection;
-                    }
-                }
-                return Err(error);
+        let destination = herdr::prepare_destination(&mut cli, &context)?;
+        if interactive {
+            let agent_action = match &agent_plan {
+                install::PreparedAgent::Available(_) => "Installed",
+                install::PreparedAgent::Install(_) => "! Install",
+            };
+            let initialization = if cli.setup_command.is_some() {
+                "Run setup command before launch".to_owned()
+            } else if cli.init_skill.is_some() {
+                format!("Ask {} to follow the selected skill", cli.agent.label())
+            } else {
+                "Skip project setup".to_owned()
+            };
+            let mut fields: Vec<(&str, &str)> = vec![
+                ("Container", &context.container_name),
+                ("Workspace", &context.workspace),
+                ("User", &context.user),
+                ("Agent", cli.agent.label()),
+                ("Agent status", agent_action),
+                ("Initialization", &initialization),
+            ];
+            if destination.is_some() {
+                fields.push(("Herdr", herdr::destination(&cli)));
             }
-            if interactive {
-                let agent_action = match &agent_plan {
-                    install::PreparedAgent::Available(_) => "Installed",
-                    install::PreparedAgent::Install(_) => "! Install",
-                };
-                let initialization = if cli.setup_command.is_some() {
-                    "Run setup command before launch".to_owned()
-                } else if cli.init_skill.is_some() {
-                    format!("Ask {} to follow the selected skill", cli.agent.label())
-                } else {
-                    "Skip project setup".to_owned()
-                };
-                let mut fields: Vec<(&str, &str)> = vec![
-                    ("Container", &context.container_name),
-                    ("Workspace", &context.workspace),
-                    ("User", &context.user),
-                    ("Agent", cli.agent.label()),
-                    ("Herdr", herdr::destination(&cli)),
-                    ("Agent status", agent_action),
-                    ("Initialization", &initialization),
-                ];
-                if let Some(command) = &cli.setup_command {
-                    fields.push(("Setup command", command));
-                }
-                if let Some(skill) = &cli.init_skill {
-                    fields.push(("Initialization skill", skill));
-                }
-                let arguments = tail
-                    .iter()
-                    .map(|arg| format!("{arg:?}"))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                if !arguments.is_empty() {
-                    fields.push(("Agent arguments", &arguments));
-                }
-                let confirmed = match prompt::review(
-                    &fields,
-                    matches!(agent_plan, install::PreparedAgent::Install(_)),
-                ) {
-                    Ok(confirmed) => confirmed,
-                    Err(e) if e.starts_with("cancelled") => false,
-                    Err(e) => return Err(e),
-                };
-                if !confirmed {
-                    if !before_destination.herdr
-                        && before_destination.herdr_workspace.is_none()
-                        && (cli.herdr || cli.herdr_workspace.is_some())
-                    {
-                        cli = before_destination.clone();
-                        continue;
-                    }
-                    if checkout_shown {
-                        cli = before_checkout;
-                        checkout_back = Some(selected);
-                        continue 'selection;
-                    }
-                    if !cli.agent_explicit && cli.agent_path.is_none() {
-                        previous = Some((selected, cli.clone()));
-                        cli = initial_cli.clone();
-                        continue 'selection;
-                    }
-                    if initial_cli.container.is_none() && initial_cli.config.is_none() {
-                        cli = initial_cli.clone();
-                        continue 'selection;
-                    }
-                    return Err("cancelled; nothing launched".into());
-                }
+            if let Some(command) = &cli.setup_command {
+                fields.push(("Setup command", command));
             }
-            break;
+            if let Some(skill) = &cli.init_skill {
+                fields.push(("Initialization skill", skill));
+            }
+            let arguments = tail
+                .iter()
+                .map(|arg| format!("{arg:?}"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            if !arguments.is_empty() {
+                fields.push(("Agent arguments", &arguments));
+            }
+            let mut repeat = cli.clone();
+            repeat.install = matches!(agent_plan, install::PreparedAgent::Install(_));
+            let command = herdr::preview(&repeat, &context, &tail)?;
+            fields.push(("CLI equivalent", &command));
+            let confirmed = match prompt::review(
+                &fields,
+                matches!(agent_plan, install::PreparedAgent::Install(_)),
+            ) {
+                Ok(confirmed) => confirmed,
+                Err(e) if e.starts_with("cancelled") => false,
+                Err(e) => return Err(e),
+            };
+            if !confirmed {
+                if checkout_shown {
+                    cli = before_checkout;
+                    checkout_back = Some(selected);
+                    continue 'selection;
+                }
+                if !cli.agent_explicit && cli.agent_path.is_none() {
+                    previous = Some((selected, cli.clone()));
+                    cli = initial_cli.clone();
+                    continue 'selection;
+                }
+                if initial_cli.container.is_none() && initial_cli.config.is_none() {
+                    cli = initial_cli.clone();
+                    continue 'selection;
+                }
+                return Err("cancelled; nothing launched".into());
+            }
         }
-        let automatic_herdr = !cli.here
-            && std::env::var("HERDR_ENV").as_deref() == Ok("1")
-            && std::io::stdin().is_terminal()
-            && std::io::stdout().is_terminal();
-        let handoff = cli.herdr || cli.herdr_workspace.is_some() || automatic_herdr;
         let executable = install::execute(agent_plan, &cli, &context)?;
         worktrees::prepare(&cli, &context, &mut tail)?;
-        if handoff {
+        if let Some(destination) = &destination {
             let mut child = cli.clone();
             child.install = false;
             child.no_input = true;
             if std::path::Path::new(&executable).is_absolute() {
                 child.agent_path = Some(executable.clone());
             }
-            if herdr::launch(&child, &context, &tail)? {
+            if herdr::launch(destination, &child, &context, &tail)? {
                 return Ok(());
             }
         }

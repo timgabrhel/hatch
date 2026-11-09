@@ -317,6 +317,33 @@ fn main() {
         "docker" => docker(&raw, &args),
         "devcontainer" => resolver(&args),
         "herdr" => herdr(&args),
+        "hc" | "herdr-core" => {
+            log("HATCH_TEST_CORE_LOG", json!(args));
+            match args.first().map(String::as_str) {
+                Some("--version") => println!("hc 0.1.19"),
+                Some("get") => {
+                    if variable("HATCH_TEST_CORE_MODE") == "unavailable" {
+                        fail(1, "Core unavailable");
+                    }
+                    println!("{}", json!({"address":args[1],"state":"live"}));
+                }
+                Some("run") if args.get(1).map(String::as_str) == Some("--help") => {
+                    if variable("HATCH_TEST_CORE_MODE") == "old-cli" {
+                        println!("--bg");
+                    } else {
+                        println!("--json --bg --no-parent --no-notify --cwd --label");
+                    }
+                }
+                Some("attach") => println!("fixture Core attached"),
+                Some("run") => match variable("HATCH_TEST_CORE_MODE").as_str() {
+                    "failure" => fail(1, "fixture launch failure"),
+                    "malformed" => println!("not JSON"),
+                    "finished" => println!("{}", json!({"address":"t10","state":"finished"})),
+                    _ => println!("{}", json!({"address":"t10","state":"live"})),
+                },
+                _ => fail(2, "unexpected Core command"),
+            }
+        }
         "curl" => {
             fs::write(variable("HATCH_TEST_DOWNLOAD_LOG"), json!(args).to_string()).unwrap();
             fs::copy(variable("HATCH_TEST_PAYLOAD"), args.last().unwrap()).unwrap();

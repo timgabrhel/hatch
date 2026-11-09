@@ -734,6 +734,12 @@ pub fn choose(
     }
 }
 
+pub fn append_initialization_prompt(cli: &Cli, context: &Context, tail: &mut Vec<OsString>) {
+    if let Some(path) = &cli.init_skill {
+        tail.push(format!("Read the initialization skill at {path:?} and follow its existing-worktree initialization instructions for the current checkout at {:?}. This checkout already exists: use its init/setup workflow, do not create or switch checkouts. Respect the project's instructions and ask for any approvals the skill requires. Report what you initialized and any failures; do not assume this is an isolated running application stack.", context.workspace).into());
+    }
+}
+
 /// Setup is parent-only. The Herdr child receives the final agent prompt and cwd,
 /// never the shell command, so setup cannot repeat after handoff.
 pub fn prepare(cli: &Cli, context: &Context, tail: &mut Vec<OsString>) -> Result<()> {
@@ -747,7 +753,7 @@ pub fn prepare(cli: &Cli, context: &Context, tail: &mut Vec<OsString>) -> Result
             ),
             "initialization skill must be readable inside container",
         )?;
-        tail.push(format!("Read the initialization skill at {path:?} and follow its existing-worktree initialization instructions for the current checkout at {:?}. This checkout already exists: use its init/setup workflow, do not create or switch checkouts. Respect the project's instructions and ask for any approvals the skill requires. Report what you initialized and any failures; do not assume this is an isolated running application stack.", context.workspace).into());
+        append_initialization_prompt(cli, context, tail);
     }
     if let Some(command) = &cli.setup_command {
         prompt::section(

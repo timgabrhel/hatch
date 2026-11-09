@@ -64,12 +64,12 @@ impl Agent {
     name = "hatch",
     version,
     about = "Enter a devcontainer and launch a coding agent",
-    after_help = "Start here: hatch\nInside Herdr: opens a new workspace. Use --here to stay in this terminal.\nAdvanced settings: hatch options\nAgent choices: hatch inspect\nPass agent arguments after --, e.g. hatch --agent claude -- 'Explain this repository'"
+    after_help = "Start here: hatch\nLaunches in the current terminal, including inside Herdr.\nAdvanced settings: hatch options\nAgent choices: hatch inspect\nPass agent arguments after --, e.g. hatch --agent claude -- 'Explain this repository'"
 )]
 pub struct Cli {
     #[arg(skip)]
     pub agent_explicit: bool,
-    /// Stay in this terminal, even inside Herdr.
+    /// Use this terminal (the default), including inside Herdr.
     #[arg(long, global = true, conflicts_with_all = ["herdr", "herdr_workspace"])]
     pub here: bool,
     /// Dev Container CLI executable (used for merged devcontainer.json resolution).
@@ -87,10 +87,10 @@ pub struct Cli {
     /// Require merged configuration instead of falling back when unavailable.
     #[arg(hide = true, long, global = true, conflicts_with = "metadata_only")]
     pub require_config: bool,
-    /// Launch in a new Herdr terminal; fall back to this terminal if unavailable.
+    /// New legacy Herdr workspace or Core terminal; fall back locally if unavailable.
     #[arg(hide = true, long, global = true)]
     pub herdr: bool,
-    /// Add a new terminal to this explicit Herdr workspace ID.
+    /// Add a new terminal to this legacy Herdr workspace ID (not supported by Core).
     #[arg(long, global = true, hide = true)]
     pub herdr_workspace: Option<String>,
     /// Accessible line-oriented prompts instead of arrow-key menus.

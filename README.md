@@ -80,7 +80,7 @@ Common options:
 | `--agent NAME` | Choose `codex`, `claude`, `copilot`, `opencode`, `cursor`, or `grok`. |
 | `--config PATH` | Select a project by its devcontainer config. |
 | `--worktree PATH` | Use an existing worktree's absolute path inside the container. |
-| `--here` | Stay in this terminal instead of opening Herdr. |
+| `--here` | Use the current terminal (the default). |
 | `--no-input` | Skip Hatch prompts and review; provide an explicit target. |
 | `--install` | Allow installation of a missing agent in unattended use. |
 
@@ -102,7 +102,7 @@ Use `hatch --help` for a short reference or see the [full CLI reference](docs/cl
 | [Configuration](docs/configuration.md) | Container startup, resolution, environment, remote Docker. |
 | [Agents](docs/agents.md) | Supported agents, installation, authentication, prerequisites. |
 | [Worktrees](docs/worktrees.md) | Creation, selection, initialization, safe removal. |
-| [Herdr](docs/herdr.md) | Workspace destinations, handoff, local fallback. |
+| [Herdr](docs/herdr.md) | Default local launch and explicit handoffs. |
 | [Development](docs/development.md) | Hatch's devcontainer, tests, packaging. |
 
 [DESIGN.md](DESIGN.md) tracks architecture, implementation status, and limitations.

@@ -55,6 +55,8 @@ hatch --container my-devcontainer --agent claude --no-input --here
 Explicit options skip the corresponding selection steps. `--no-input` skips all
 Hatch prompts and the final review; it does not make the agent noninteractive.
 Add `--install` to authorize installation of a missing agent in this mode.
+The session summary's **CLI equivalent** command shows the public CLI options for your
+selections, including `--no-input` to bypass the guided flow next time.
 
 ## Command-specific options
 
@@ -98,15 +100,17 @@ See [agent installation](agents.md) and [worktree initialization](worktrees.md#i
 
 | Option | Purpose |
 |---|---|
-| `--here` | Stay in this terminal, including inside Herdr. |
-| `--herdr` | Request a new Herdr workspace. |
-| `--herdr-workspace ID` | Open a fresh tab in a specific Herdr workspace. |
+| `--here` | Explicit current-terminal launch (the default). |
+| `--herdr` | Explicit legacy workspace handoff, or a new Core session attached here when interactive. |
+| `--herdr-workspace ID` | Open a fresh tab in a specific legacy Herdr workspace; unavailable in Core. |
 | `--no-input` | Skip Hatch prompts; require an explicit target for unattended launch. |
 | `--no-tty` | Disable Docker's terminal allocation. |
 | `--plain` | Use numbered prompts instead of arrow-key menus. |
 
-`--here` conflicts with explicit Herdr destination options. Piped input and redirected
-output normally stay in the current terminal. See [Herdr handoff](herdr.md).
+Normal launch always uses the current terminal, even inside Herdr/Core; no destination
+menu appears. `--here` conflicts with explicit Herdr destination options. Explicit Core
+handoffs attach immediately when stdin/stdout are terminals and --no-tty is absent;
+otherwise Hatch prints the detached session's attach command. See [Herdr handoff](herdr.md).
 
 ## Forward agent arguments
 

@@ -278,7 +278,10 @@ fn setup_failure_keeps_checkout_and_creates_no_terminal_and_skill_is_explicit() 
     );
     contains(&h.run_os(&args, b"", 1).err, "checkout retained");
     assert!(h.path("feature").is_dir());
-    assert!(h.herdr_calls().is_empty());
+    assert!(h
+        .herdr_calls()
+        .iter()
+        .all(|c| *c == json!(["workspace", "list"])));
     let skill = h.path("feature/init skill.md");
     fs::write(&skill, "Fixture initialization instructions").unwrap();
     h.run_os(
@@ -308,7 +311,7 @@ fn setup_failure_keeps_checkout_and_creates_no_terminal_and_skill_is_explicit() 
     }
 }
 #[test]
-fn escape_from_herdr_returns_through_checkout_to_agent() {
+fn escape_from_review_returns_through_checkout_to_agent() {
     let mut h = repo();
     h.herdr();
     h.edit_fixture(|v| {
@@ -320,7 +323,7 @@ fn escape_from_herdr_returns_through_checkout_to_agent() {
     p.expect("Choose a checkout / worktree");
     p.expect(PROMPT);
     p.send(b"1\r");
-    p.expect("Open agent in Herdr");
+    p.expect("Launch this session?");
     p.expect(PROMPT);
     p.send(b"\x1b");
     p.expect("Choose a checkout / worktree");
@@ -331,7 +334,10 @@ fn escape_from_herdr_returns_through_checkout_to_agent() {
     p.send(b"\x1b");
     p.finish(1);
     h.no_launch();
-    assert!(h.herdr_calls().is_empty());
+    assert!(h
+        .herdr_calls()
+        .iter()
+        .all(|c| *c == json!(["workspace", "list"])));
 }
 #[test]
 fn escape_returns_from_initialization_and_checkout_without_changing_workspace() {

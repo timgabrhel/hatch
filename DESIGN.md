@@ -24,7 +24,7 @@ Native archives include the README, these guides, and contributor instructions.
 - Polished inline terminal interaction, explicit unattended commands, no full-screen UI.
 - Small synchronous Rust implementation. Current-terminal launch replaces Hatch with
   Docker using Unix exec. No Hatch daemon, watch loop, or resident launcher.
-- Optional Herdr handoff creates a fresh terminal, passes explicit inputs, and exits.
+- Launch stays in the current terminal by default. Explicit Herdr handoffs remain supported.
 - Install agents only inside the selected container as the selected development user.
   Check tools and permissions; never assume Bash, package management, or root.
 - No automatic host credential/history transfer, devcontainer edits, forced rebuilds,
@@ -45,7 +45,7 @@ Native archives include the README, these guides, and contributor instructions.
 | `--devcontainer-cli`, `--require-config`, `--metadata-only` | Resolver selection and fallback policy |
 | `--install` | Install only if missing; unattended opt-in; no automatic upgrade |
 | `--no-input`, `--no-tty`, `--plain` | Prompt, terminal allocation, accessibility controls |
-| `--here` | Disable automatic Herdr handoff |
+| `--here` | Explicit current-terminal launch (the default) |
 | `--herdr`, `--herdr-workspace` | Advanced explicit handoff/target overrides |
 | `worktrees [--json]` | Read-only list of Git worktrees inside the selected container |
 | `worktree create/remove` | Explicit Git lifecycle in a persistent container mount; no forced removal |
@@ -189,54 +189,56 @@ Single-line menus, including agent selection, have no
 five-item page limit; path-detail menus retain it. A stylized lowercase wordmark becomes HATCH on narrow
 terminals, with the Cargo package version below the tagline. Choices separate the
 name from an indented, dimmed Path line; plain mode retains the same text hierarchy.
-Escape returns through config/workspace/agent/checkout/destination menus and exits
+Escape returns through config/workspace/agent/checkout menus and exits
 at the first available step. Initialization Back restores the original checkout
 context without deleting worktrees. Numbered menus also read Escape immediately.
 Path prompts read keys through console so Escape immediately returns to the
 previous menu, including in plain mode; partial input is discarded and terminal settings
 are restored. Empty Enter or q also goes back. Paths accept quotes and ~/, without shell
-execution. The Your session review identifies container/workspace/user/agent/destination,
+execution. The Your session review identifies container/workspace/user/agent, with destination only for an explicit handoff,
 pending installation, the initialization mode (including skipped setup), the selected
 command or skill path, and agent arguments. Interactive launches
 require Install Agent & Launch for a missing agent, or Confirm and launch for an
 available agent, before installation, setup, Herdr terminal creation or agent execution.
 The summary is part of the arrow menu redraw area, with explicit wrapping so Back
 clears all rows. Numbered mode reuses an unchanged summary in its transcript. The review contains only its launch action; Escape returns to the preceding choice.
+Accepting the rich review preserves its summary and CLI equivalent in the transcript.
 Unattended --no-input launches retain their explicit-command behavior. Notices
 and errors wrap into short blocks; inspect renders readable terminal summaries,
 with --json or redirected output preserving full JSON. Plain and NO_COLOR modes remain.
 
 ## Herdr
 
-`herdr.rs` is automatic when HERDR_ENV=1 and stdin/stdout are terminals. --here
-opts out. Piped data and redirected output remain local; advanced --herdr explicitly
-requests handoff. Unavailable Herdr or missing local path mapping falls back locally.
-Interactive launches ask New workspace versus This workspace (new tab) as the last
-destination choice before review, after provisioning and checkout/initialization selection.
-Missing agents show a yellow ! Install status in Your session (Installed when available) and Install Agent & Launch
-as the final action. No separate installation-consent menu is shown.
-Container selected notices are omitted, including on Back.
-Agent preparation separates read-only discovery/prerequisites and consent from execution:
-the installer runs only after explicit session review confirmation, before setup and handoff.
-Backing out discards the pending installation plan.
-The answer appears under Herdr in the session summary and is retained for handoff.
-Menu spacers belong
-to the cleared menu area, so completed choices do not accumulate blank lines. Escape from destination selection returns to checkout selection
-when available, otherwise to the preceding agent/container choice. The current ID comes from HERDR_WORKSPACE_ID and is validated
-against the workspace list before creating a tab. Missing IDs fail without guessing.
-This prompt performs no Herdr API calls or mutations. --here, --herdr, explicit
---herdr-workspace and --no-input bypass it. Explicit --herdr defaults to a new workspace.
-Focus is preserved; no existing pane receives commands.
-New workspace labels use only the selected container name.
-The old registry is unused and left intact; fs2 and sha2 dependencies were removed.
+Normal launch always stays in the current terminal, including inside legacy Herdr and
+Core. The destination menu and default Herdr summary row have been removed at the user's
+request. Direct launch still execs Docker and retains exact agent arguments and stdin.
+Escape from review returns to checkout, agent or container selection as appropriate.
 
-The child receives an absolute Hatch path, --here (preventing recursion), explicit
-selected inputs, canonical config/workspace, and pinned Docker connection variables.
-Agent selection keys differ from executable names for Cursor, and
-handoff preserves that distinction. Arguments are shell-quoted once. Non-UTF-8 argv
-fails before mutations; direct launches retain it. Empty pane-run success is accepted.
-Ambiguous errors identify the new terminal without retrying or duplicating locally.
-Local launch continues to exec Docker for terminal/signal/exit handling without a parent.
+Advanced --herdr and --herdr-workspace remain explicit opt-ins. Core detection uses
+HC_TERMINAL_ID and takes precedence over legacy HERDR_ENV; Core never routes to legacy.
+Explicit Core handoffs validate the CLI and current terminal before review, create an
+independent session with run --bg --no-parent --no-notify after confirmation/preparation,
+and exec hc attach when stdin/stdout are terminals and --no-tty is absent. Redirected
+handoffs print the attach command. Attach failures retain and identify the new session.
+No Hatch wrapper, duplicate retry or desktop window/tab creation is implied. Legacy
+explicit handoffs retain workspace/tab creation and preserve focus. No commands are
+sent to existing panes. Normal launch does not probe either terminal manager.
+
+The public CLI equivalent preserves inputs without the internal handoff environment
+wrapper. Children receive absolute Hatch/config/workspace paths, the selected agent,
+--here and --no-input, and no repeated install/setup. Docker connection settings
+and the caller's PATH are pinned; relative PATH entries and resolver paths are anchored
+before changing cwd. This fixes the observed t14 failure to find devcontainer in the
+Core server's stale environment. A process test executes actual child argv against
+Docker/resolver fixtures with a stale server PATH and different cwd for both backends.
+
+Read-only inspection of user-created Core sessions t16–t18 confirmed Codex running in
+the selected container and waiting at its folder-trust prompt. The user confirmed local
+launch works; the perceived new-window failure was detached Core sessions without desktop
+placement. Defaults now avoid that handoff entirely. No trust prompts were answered and
+no existing sessions were closed. Tests cover default local launch without Herdr calls,
+review gating and Back navigation, explicit Core create-then-attach, child recursion
+prevention, and failures. Live commands were inspection only; no test sessions were created.
 
 ## Packaging and migration
 

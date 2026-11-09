@@ -2,62 +2,56 @@
 
 [← Back to README](../README.md)
 
-Inside Herdr (`HERDR_ENV=1`), interactive launches offer two destinations:
+Hatch launches the agent in the **current terminal** by default, including inside
+legacy Herdr and Herdr Core. There is no window/tab destination question. After
+session confirmation and any installation/setup, Hatch replaces itself with
+`docker exec` and the agent appears directly in your terminal.
 
-- **New workspace**, named after the selected container.
-- **This workspace (new tab)**, using `HERDR_WORKSPACE_ID`.
+Codex may ask you to trust the container workspace or log in. Those are agent
+prompts for you to answer; Hatch does not bypass them.
 
-Destination selection is the last choice before **Your session**. The review then
-asks for **Confirm and launch** or **Install Agent & Launch**, depending on agent availability.
-Backing out does not install an agent or create a Herdr terminal.
+## Explicit handoffs
 
-## Choose a destination explicitly
+The advanced CLI options remain for existing workflows:
 
 ```sh
-hatch --here
-hatch --herdr
-hatch --herdr-workspace WORKSPACE_ID
+hatch --container my-devcontainer --herdr
+hatch --container my-devcontainer --herdr-workspace WORKSPACE_ID
 ```
 
-`--here` keeps the current terminal. `--herdr` requests a new workspace, while
-`--herdr-workspace ID` opens a fresh tab in a specific workspace. These options
-skip the destination question.
+Inside Core (`HC_TERMINAL_ID`), `--herdr` creates an independent Core session and
+immediately attaches to it in the current terminal. Ctrl-\ detaches; the session
+keeps running. Hatch execs `hc attach`, leaving no Hatch wrapper. With redirected
+input/output or `--no-tty`, the session remains detached and Hatch prints its attach
+command. This does not create a desktop window or tab.
 
-Hatch reads the current workspace ID from `HERDR_WORKSPACE_ID`, not another client's
-focused workspace. It validates that ID before creating a tab.
+Inside legacy Herdr (`HERDR_ENV=1`), `--herdr` creates a workspace and
+`--herdr-workspace ID` creates a fresh tab in the named workspace. These explicit
+legacy operations preserve focus. Core takes precedence when both markers exist;
+Core cannot accept `--herdr-workspace` and never falls back to the legacy server.
+`--here` remains supported as an explicit spelling of the default behavior.
 
-## Handoff behavior
+Only explicit handoffs probe terminal-manager availability. Capability checks and
+workspace validation happen before review; terminal creation waits until confirmation,
+agent preparation and setup succeed. Unavailable handoffs resolve locally before review.
+A failure after confirmation never silently changes the selected destination or retries
+an ambiguous launch. An attach failure includes the address of the retained Core session.
 
-Hatch prepares the agent before creating a fresh terminal. It submits an explicit
-Hatch command and exits, leaving existing panes untouched and preserving focus.
-An acknowledgement means the command was queued, not that the agent finished starting.
+## Child command and diagnostics
 
-The child command includes:
+Children receive explicit container, workspace, user, agent, configuration and argument
+inputs, the prepared executable path when known, `--here`, and `--no-input`. They never
+repeat installation or setup. Docker connection settings and the launching
+shell's host PATH are preserved. Relative PATH entries and resolver file paths are
+anchored before changing directories, so a terminal server's stale environment cannot
+hide the Dev Container CLI or its Node.js interpreter.
 
-- Explicit container, workspace, user, agent, arguments, and config inputs.
-- The prepared absolute agent path when available.
-- `--here` to prevent recursion and `--no-input` to skip another review.
-- The selected Docker connection settings.
+The session review shows the public CLI equivalent; its normal default has no Herdr
+summary row. Explicit handoffs include their destination. Arbitrary non-UTF-8 agent
+arguments remain supported by direct launch; handoffs require UTF-8.
 
-The child rechecks the executable but never installs it again. Changes to the
-container between preflight and child startup can still cause a failure.
-
-Arguments are shell-quoted once. Non-UTF-8 arguments fail before workspace creation;
-use `--here` for arbitrary Unix argument bytes.
-
-After an ambiguous pane-run failure, Hatch identifies the created terminal. It does
-not retry the handoff or launch a duplicate locally. No workspace reuse registry is
-used; old Hatch registry files are left untouched.
-
-## Local fallback
-
-Outside Herdr, or when Herdr is unavailable, Hatch uses the current terminal.
-Handoff also needs a verified local project directory and a local Unix Docker endpoint.
-Without those, Hatch falls back locally.
-
-Piped input and redirected output normally stay local so scripts retain their data.
-An explicit `--herdr` request can override automatic destination detection.
-
-Local launch uses Unix `exec`: Hatch replaces itself with Docker. Input, signals,
-resizing, and the exit status go directly through Docker, while the calling shell
-waits normally. Hatch leaves no resident parent, daemon, or polling loop.
+Observed user-created Core sessions t16–t18 reached Codex inside the container and
+waited at its folder-trust screen. They were invisible because the former automatic
+handoff created detached Core terminals rather than desktop tabs. Default launches now
+stay local, and explicit interactive Core handoffs attach immediately. Existing sessions
+are not closed or answered automatically.

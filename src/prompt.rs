@@ -99,6 +99,10 @@ fn section_text(title: &str, fields: &[(&str, &str)]) -> String {
         .max()
         .unwrap_or(0);
     for (key, value) in fields {
+        if *key == "CLI equivalent" {
+            output.push_str(&command_block(value, plain()));
+            continue;
+        }
         let label = format!("{:<width$}", format!("{}:", clean(key)));
         if plain() {
             writeln!(&mut output, "  {label} {}", clean(value)).unwrap();
@@ -229,16 +233,20 @@ pub fn review(fields: &[(&str, &str)], install: bool) -> Result<bool> {
     let theme = ReviewTheme {
         summary: review_text(fields, install),
     };
-    Select::with_theme(&theme)
+    let confirmed = Select::with_theme(&theme)
         .with_prompt("Launch this session?")
         .items(&labels)
         .default(0)
         .report(false)
         .interact_on_opt(&Term::stderr())
         .map(|choice| choice == Some(0))
-        .map_err(|e| format!("menu input: {e}"))
+        .map_err(|e| format!("menu input: {e}"))?;
+    if confirmed {
+        eprint!("{}", theme.summary);
+    }
+    Ok(confirmed)
 }
-fn review_text(fields: &[(&str, &str)], install: bool) -> String {
+pub fn review_text(fields: &[(&str, &str)], install: bool) -> String {
     use std::fmt::Write;
     // Explicit wrapping lets dialoguer count every physical review row when it
     // clears the prompt. Leave the last column free to avoid terminal autowrap.
@@ -251,6 +259,10 @@ fn review_text(fields: &[(&str, &str)], install: bool) -> String {
         .min(columns / 2);
     let mut output = format!("\n  {}\n", style("Your session").cyan().bold());
     for (key, value) in fields {
+        if *key == "CLI equivalent" {
+            output.push_str(&command_block(value, false));
+            continue;
+        }
         let needs_install = install && *key == "Agent status";
         let key = format!("{}:", clean(key));
         let label = format!(
@@ -276,6 +288,19 @@ fn review_text(fields: &[(&str, &str)], install: bool) -> String {
         }
     }
     output
+}
+
+fn command_block(command: &str, plain: bool) -> String {
+    if plain {
+        return format!("\n  CLI equivalent:\n  ```sh\n{command}\n  ```\n");
+    }
+    format!(
+        "\n  {}\n  {}\n{}\n  {}\n",
+        style("CLI equivalent:").cyan().bold(),
+        style("```sh").dim(),
+        style(command).green(),
+        style("```").dim()
+    )
 }
 struct ReviewTheme {
     summary: String,
