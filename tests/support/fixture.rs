@@ -49,6 +49,24 @@ fn docker(raw: &[OsString], args: &[String]) {
             }
         ),
         "ps" => {
+            if args.iter().any(|a| a == "--filter") {
+                let data: Vec<Value> =
+                    serde_json::from_slice(&fs::read(variable("HATCH_TEST_FIXTURE")).unwrap())
+                        .unwrap();
+                for container in data {
+                    if args.windows(2).filter(|w| w[0] == "--filter").all(|w| {
+                        let (key, value) = w[1]
+                            .strip_prefix("label=")
+                            .unwrap()
+                            .split_once('=')
+                            .unwrap();
+                        container["Config"]["Labels"][key].as_str() == Some(value)
+                    }) {
+                        println!("{}", container["Id"].as_str().unwrap());
+                    }
+                }
+                return;
+            }
             if mode != "empty" {
                 println!("fixture-id")
             }
@@ -209,6 +227,15 @@ fn resolver(args: &[String]) {
     log("HATCH_TEST_RESOLVER_LOG", json!(args));
     if args[0] == "up" {
         let mode = variable("HATCH_TEST_UP_MODE");
+        let gate = variable("HATCH_TEST_UP_GATE");
+        if !gate.is_empty() {
+            for i in 0..40 {
+                eprintln!("build-line-{i:02}");
+            }
+            while !Path::new(&gate).exists() {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        }
         match mode.as_str() {
             "error" => fail(9, "fixture build failed"),
             "invalid" => {

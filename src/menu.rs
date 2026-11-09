@@ -1,14 +1,16 @@
 use crate::{
-    cli::{Agent, Cli},
+    cli::{Action, Agent, Cli},
     discovery::{self, Container},
     prompt, provision, workspace_input, Result,
 };
 
 pub fn select_from(cli: &mut Cli, mut previous: Option<(Container, Cli)>) -> Result<Container> {
+    let original_command = cli.command.clone();
     let original_config = cli.config.clone();
     let original_workspace = cli.host_workspace.clone();
     let can_go_back = cli.container.is_none() && original_config.is_none();
     'containers: loop {
+        cli.command = original_command.clone();
         cli.config = original_config.clone();
         cli.host_workspace = original_workspace.clone();
         let mut agent_selected = false;
@@ -26,10 +28,39 @@ pub fn select_from(cli: &mut Cli, mut previous: Option<(Container, Cli)>) -> Res
                 .collect::<Vec<_>>();
             if !cli.metadata_only {
                 labels.push("New from devcontainer.json…".into());
+                labels.push("Rebuild a devcontainer…".into());
             }
             let choice = prompt::choose("Select a container", &labels, true)?;
             if let Some(container) = containers.get(choice) {
                 container.clone()
+            } else if choice == containers.len() + 1 {
+                let targets = discovery::discover_all()?;
+                if targets.is_empty() {
+                    prompt::note("No existing devcontainers to rebuild.");
+                    continue 'containers;
+                }
+                let labels = targets
+                    .iter()
+                    .map(Container::display_label)
+                    .collect::<Vec<_>>();
+                let target = match prompt::choose("Select a container to rebuild", &labels, true) {
+                    Ok(index) => &targets[index],
+                    Err(e) if e.starts_with("cancelled") => continue 'containers,
+                    Err(e) => return Err(e),
+                };
+                let config = target.label("devcontainer.config_file")
+                    .ok_or("This container has no config label; use hatch rebuild --config PATH --host-workspace DIR")?;
+                let folder = target.local_folder()
+                    .ok_or("This container has no workspace label; use hatch rebuild --config PATH --host-workspace DIR")?;
+                cli.config = Some(config.into());
+                cli.host_workspace = Some(folder.into());
+                cli.command = Some(Action::Rebuild { no_cache: false });
+                agent_selected = true;
+                match configured(cli) {
+                    Ok(container) => container,
+                    Err(e) if e.starts_with("cancelled") => continue 'containers,
+                    Err(e) => return Err(e),
+                }
             } else {
                 loop {
                     let Some(path) = choose_config()? else {

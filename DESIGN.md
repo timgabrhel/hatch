@@ -27,7 +27,7 @@ Native archives include the README, these guides, and contributor instructions.
 - Launch stays in the current terminal by default. Explicit Herdr handoffs remain supported.
 - Install agents only inside the selected container as the selected development user.
   Check tools and permissions; never assume Bash, package management, or root.
-- No automatic host credential/history transfer, devcontainer edits, forced rebuilds,
+- No automatic host credential/history transfer, devcontainer edits, implicit rebuilds,
   implicit worktree mutations, or installed cf replacement. Explicit startup runs project hooks.
 
 ## Implemented surface
@@ -37,6 +37,7 @@ Native archives include the README, these guides, and contributor instructions.
 | `hatch` | Guided container/agent selection in terminals; explicit target required in scripts |
 | `update` | Update the running host executable from the latest verified release |
 | `up --config PATH` | Reuse a running match, otherwise official CLI start/create, then launch |
+| `rebuild --config PATH [--no-cache]` | Explicitly replace one existing match, then review/launch |
 | `containers [--json]` | Interactive browser; JSON/nonterminal/--no-input is read-only inventory |
 | `inspect [--json]` | Select a container; launch context, agent availability and executable paths |
 | `--agent`, `--agent-path` | Agent choice or explicit in-container executable |
@@ -62,8 +63,15 @@ nonstandard and remote Docker layouts require --host-workspace. A running match 
 without hooks. No match offers a default-Cancel startup prompt, or requires explicit
 `up` unattended. Read-only commands never start containers; the interactive containers browser is a launch flow. Startup delegates image,
 Dockerfile, Feature and Compose handling to `devcontainer up`, with both identity labels
-explicit, no forced removal/rebuild, and --no-lockfile. Normal project lifecycle hooks
-run, including host initializeCommand; stderr streams their build/progress output.
+explicit, no forced removal/rebuild on normal launch/up, and --no-lockfile. Normal project lifecycle hooks
+run, including host initializeCommand; startup captures build/progress output in a
+private retained temporary log. Interactive rich terminals use an inline scrolling pane;
+plain/nonterminal output streams stderr. Readiness summaries include a muted Dev container log field with its absolute path
+(hatch-devcontainer-*.log), also included in failures. The log is reserved before
+confirmation and removed if cancelled; it is retained once startup begins. Rebuild
+warnings follow the summary as a short dim-yellow note. Pane headings are muted cyan; log text stays muted gray. Both are indented two spaces,
+with a blank line above; the spacer is included in redraw/cleanup and NO_COLOR remains
+supported. Plain streamed logs also use the same indentation.
 stdin remains reserved for the agent. A successful JSON result must identify a running
 container with the requested labels before launch. Failure leaves resources intact.
 Hatch creates no editor host or automatic forwardPorts tunnels.
@@ -146,6 +154,17 @@ container/config target, even with one running container. `inspect` also prompts
 container even for a singleton, skips selection with explicit target options, and requires
 an explicit target unattended. Its table shows name, availability and selection flag.
 
+The container browser also offers “Rebuild a devcontainer…”, followed by target
+selection (including stopped containers), agent selection, default-Cancel rebuild
+confirmation, build logs, checkout selection and final review. It resolves the target's
+config/workspace labels and requires exactly one matching existing container. CLI
+`rebuild --config` uses the same flow; unattended replacement requires --no-input.
+The official CLI receives --remove-existing-container and --expect-existing-container;
+cache is preserved unless --no-cache adds --build-no-cache. Replacement stops sessions
+and loses nonpersistent files, as stated before confirmation. Failed rebuilds can leave
+the original container removed. No automatic retry/fallback rebuild occurs. Successful
+rebuild intent is consumed before further navigation and never passed to Herdr children.
+
 The container browser's “New from devcontainer.json…” option offers local configs discovered from the current
 directory (direct devcontainer.json, .devcontainer.json, .devcontainer/devcontainer.json,
 and .devcontainer/PROFILE/devcontainer.json), plus manual path entry. It does not search
@@ -160,6 +179,17 @@ heading before confirmation. Summary labels are aligned without interior blank l
 plain/no-color modes remain supported. The redundant no-matching-container sentence
 and lifecycle-hook explanation are omitted from the startup prompt. Startup still
 executes the project's normal configured lifecycle hooks.
+Startup confirmation checks all containers using both identity labels and offers Start
+container for an existing match, Create container otherwise (Cancel stays the default).
+It explicitly explains that session review follows startup. The rich startup pane shows
+up to eight lines with Up/Down or k/j scrolling and f to follow, retaining 2,000 lines
+of bounded display history. Full output remains in a private 0600 temporary log, including
+the final CLI result; errors identify that log. Plain and redirected output stream normally.
+Only the synchronous startup command uses a temporary display loop; it ends before agent
+launch. Ctrl-C stops the startup process group and restores terminal settings. Disposable
+PTY tests cover scrolling, follow, completion and cancellation with terminal restoration;
+fixtures cover start/create labels and retained private failure logs.
+
 
 The repository includes an empty hatch.code-workspace placeholder with folders: [].
 It intentionally specifies no folders yet. Interactive selection of an empty workspace
@@ -226,7 +256,7 @@ sent to existing panes. Normal launch does not probe either terminal manager.
 
 The public CLI equivalent preserves inputs without the internal handoff environment
 wrapper. Children receive absolute Hatch/config/workspace paths, the selected agent,
---here and --no-input, and no repeated install/setup. Docker connection settings
+--here and --no-input, and no repeated install/setup/rebuild. Docker connection settings
 and the caller's PATH are pinned; relative PATH entries and resolver paths are anchored
 before changing cwd. This fixes the observed t14 failure to find devcontainer in the
 Core server's stale environment. A process test executes actual child argv against

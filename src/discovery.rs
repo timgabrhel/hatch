@@ -135,16 +135,26 @@ impl Container {
 }
 
 pub fn discover(explicit: Option<&str>) -> Result<Vec<Container>> {
+    discover_inner(explicit, false)
+}
+
+pub fn discover_all() -> Result<Vec<Container>> {
+    discover_inner(None, true)
+}
+
+fn discover_inner(explicit: Option<&str>, all: bool) -> Result<Vec<Container>> {
     let ids: Vec<String> = if let Some(name) = explicit {
         if name.is_empty() || name.starts_with('-') {
             return Err("--container requires a nonempty name or ID, not an option".into());
         }
         vec![name.to_owned()]
     } else {
-        let bytes = capture(
-            Command::new("docker").args(["ps", "--quiet", "--no-trunc"]),
-            "list running containers",
-        )?;
+        let mut command = Command::new("docker");
+        command.args(["ps", "--quiet", "--no-trunc"]);
+        if all {
+            command.arg("--all");
+        }
+        let bytes = capture(&mut command, "list running containers")?;
         String::from_utf8(bytes)
             .map_err(|e| e.to_string())?
             .lines()
@@ -174,7 +184,7 @@ pub fn discover(explicit: Option<&str>) -> Result<Vec<Container>> {
             );
         }
     } else {
-        containers.retain(|c| c.state.running && !c.state.paused && c.is_devcontainer());
+        containers.retain(|c| (all || (c.state.running && !c.state.paused)) && c.is_devcontainer());
     }
     containers.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
     Ok(containers)

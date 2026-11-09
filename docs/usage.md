@@ -26,12 +26,21 @@ workspace files and the inferred project folder. You can also enter a path; quot
 and `~/` are supported.
 
 A matching running container is reused. Startup requires confirmation and runs the
-project's normal lifecycle hooks. Agent selection happens before startup.
+project's normal lifecycle hooks. Agent selection happens before startup. The action
+says **Start container** for an existing match or **Create container** for a new one;
+you review the session afterward before launching the agent. Startup logs appear in
+a compact pane (Up/Down to scroll, f to follow). Failures include a full log file path.
+Plain mode streams output normally.
 
 Workspace files support JSON comments, trailing commas, and relative folders.
 Multi-folder files prompt for a folder. Empty workspace files use the inferred root;
 Hatch only creates a workspace file when you select the explicit create action.
 See [configuration](configuration.md) for discovery and remote Docker details.
+
+For replacement, choose **Rebuild a devcontainer… → target container → agent →
+Rebuild container**. Rebuild logs appear next, followed by checkout selection and
+session review. The target list includes stopped devcontainers. Cancelling before
+rebuild confirmation performs no replacement; backing out afterward cannot undo it.
 
 ## Agent and checkout
 

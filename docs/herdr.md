@@ -41,7 +41,7 @@ an ambiguous launch. An attach failure includes the address of the retained Core
 
 Children receive explicit container, workspace, user, agent, configuration and argument
 inputs, the prepared executable path when known, `--here`, and `--no-input`. They never
-repeat installation or setup. Docker connection settings and the launching
+repeat installation, setup or rebuild. Docker connection settings and the launching
 shell's host PATH are preserved. Relative PATH entries and resolver file paths are
 anchored before changing directories, so a terminal server's stale environment cannot
 hide the Dev Container CLI or its Node.js interpreter.

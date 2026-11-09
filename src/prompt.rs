@@ -62,6 +62,19 @@ pub fn warning(value: &str) {
     note(value);
 }
 pub fn note(value: &str) {
+    wrapped_note(value, false);
+}
+pub fn caution(value: &str) {
+    wrapped_note(value, true);
+}
+fn wrapped_note(value: &str, caution: bool) {
+    let print_line = |line: &str| {
+        if caution && !plain() {
+            eprintln!("  {}", style(line).yellow().dim());
+        } else {
+            eprintln!("  {line}");
+        }
+    };
     let width = usize::from(Term::stderr().size().1).clamp(40, 100) - 4;
     for paragraph in value.lines() {
         let mut line = String::new();
@@ -70,7 +83,7 @@ pub fn note(value: &str) {
                 && console::measure_text_width(&line) + console::measure_text_width(word) + 1
                     > width
             {
-                eprintln!("  {line}");
+                print_line(&line);
                 line.clear();
             }
             if !line.is_empty() {
@@ -78,7 +91,7 @@ pub fn note(value: &str) {
             }
             line.push_str(word);
         }
-        eprintln!("  {line}");
+        print_line(&line);
     }
 }
 pub fn section(title: &str, fields: &[(&str, &str)]) {

@@ -18,6 +18,7 @@ the selected agent.
 | `hatch` | Guided launch; use explicit inputs for scripts. |
 | `hatch update` | Update the host executable in place from the latest GitHub release. |
 | `hatch up --config PATH` | Reuse, start, or create a devcontainer, then launch. |
+| `hatch rebuild --config PATH` | Replace one matching existing devcontainer, then launch. |
 | `hatch containers` | Open the container browser in an interactive terminal. |
 | `hatch containers --json` | Return a read-only inventory of running devcontainers. |
 | `hatch inspect` | Select one container and inspect its context and available agents. |
@@ -26,7 +27,12 @@ the selected agent.
 | `hatch worktree remove PATH` | Remove a clean linked worktree, keeping its branch. |
 | `hatch options` | Explain all settings. |
 
-`up` requires `--config` and cannot be combined with `--container`. Worktree management
+`up` and `rebuild` require `--config` and cannot be combined with `--container`.
+`rebuild` requires exactly one matching existing container, running or stopped. It
+asks for confirmation before replacement; unattended replacement requires `--no-input`.
+It uses the build cache unless `--no-cache` is supplied. Normal launch and `up` never
+rebuild as a fallback. Rebuild stops existing container sessions and discards changes
+outside persistent mounts. After rebuilding, the usual session review precedes launch. Worktree management
 requires an existing running container. See [configuration](configuration.md) and
 [worktrees](worktrees.md) for the full behavior.
 
@@ -63,6 +69,7 @@ selections, including `--no-input` to bypass the guided flow next time.
 | Command | Option | Purpose |
 |---|---|---|
 | `containers`, `inspect`, `worktrees` | `--json` | Print machine-readable output. |
+| `rebuild` | `--no-cache` | Rebuild the image without the build cache. |
 | `worktree create PATH` | `--branch NAME` | Required local branch name. |
 | `worktree create PATH` | `--from REF` | Create a new branch from an existing local ref or commit; no fetch. Without it, the branch must already exist. |
 | `worktree remove PATH` | `--yes` | Confirm removal and acknowledge no session is using the checkout. Required when removal cannot prompt. |

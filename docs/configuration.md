@@ -15,15 +15,53 @@ Matching uses both config and workspace paths. A running match is reused directl
 without rebuilding or rerunning lifecycle hooks.
 
 If no running match exists, an interactive launch offers to start/create one (default Cancel); unattended launches
-require `up`.
+require `up`. The confirmation offers **Start container** when a container with the
+matching config/workspace labels exists, or **Create container** otherwise. Startup
+is followed by session selection and review; the startup button does not launch the agent.
 
 The official Dev Container CLI handles stopped containers, image pulls,
 Dockerfile builds, Features, and Compose startup. It runs the project's normal lifecycle
-hooks, including host `initializeCommand`. Build/hook output streams to stderr and may
-include whatever the project's scripts print.
+hooks, including host `initializeCommand`. Interactive startup shows up to eight lines
+of logs in an inline pane. Use Up/Down or k/j to scroll, and f to follow new output.
+The pane retains the most recent 2,000 lines; long lines are clipped to its width.
+Ctrl-C cancels startup and restores terminal settings. Plain mode and redirected
+output stream logs to stderr without the pane.
 
-Hatch never requests container removal or a forced rebuild. Failed startup leaves any created resources intact for diagnosis;
+Every startup saves full stderr and the CLI result to a private (0600)
+`hatch-devcontainer-*.log` file in the system temporary directory (`TMPDIR` when set).
+The readiness summary includes its absolute path as **Dev container log**, with a
+muted field label. Rebuild warnings follow that summary in dim yellow. Log panes use
+muted cyan headings and gray text, indented to align with other output, with a blank line
+above the pane. Failure messages also include the absolute log path. Cancelling before
+startup removes the reserved empty log file.
+The log survives Hatch exiting, until removed manually or by temporary-file cleanup.
+It can include whatever project hooks print; displayed log lines are sanitized in the pane.
+
+Normal launch and `up` never request container removal or a forced rebuild. Failed startup leaves any created resources intact for diagnosis;
 it does not launch an agent or automatically retry.
+
+## Explicit rebuild
+
+Choose **Rebuild a devcontainer…** in the container picker, then select an existing
+target (running or stopped), choose the agent, and confirm **Rebuild container**.
+Hatch uses the target's config/workspace labels; if they are missing or inaccessible,
+supply local source paths through the CLI instead:
+
+```sh
+hatch rebuild --config .devcontainer/devcontainer.json
+hatch rebuild --config .devcontainer/devcontainer.json --no-cache
+# Explicit unattended replacement and launch:
+hatch rebuild --config .devcontainer/devcontainer.json --agent codex --no-input
+```
+
+Exactly one container must match both identity labels. The default-Cancel confirmation
+explains that replacement stops its sessions and discards files outside persistent mounts.
+Hatch delegates to `devcontainer up --remove-existing-container --expect-existing-container`,
+retaining the build cache unless `--no-cache` adds `--build-no-cache`. Normal lifecycle
+hooks run, with the scrolling startup log pane and retained failure logs. A failed rebuild
+can leave the old container removed; Hatch never attempts another replacement automatically.
+After success, checkout choices and the final session review proceed normally.
+Backing out after completion or launching a Herdr child does not repeat the rebuild.
 
 ## Workspace and identity
 

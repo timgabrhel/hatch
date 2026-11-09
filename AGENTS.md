@@ -75,7 +75,8 @@ tar, gzip, and sha256sum. Build products and local dependency installations are 
   host auth files directly via read-only mounts at the container user's auth paths. Keep this
   project setup separate from Hatch's runtime defaults; test only with dummy credentials.
 - Keep inspect/inventory read-only. Container startup requires explicit `up` or consent
-  in the guided flow. Never force a rebuild or remove a container as a fallback.
+  in the guided flow. Rebuild requires the explicit rebuild command/menu action and
+  confirmation (or --no-input); never rebuild or remove a container as a fallback.
 - Inspect checks executable availability and paths only; do not add authentication or mount-coverage
   probes or infer login status from installation. Login belongs to the agent itself.
 - `inspect` prompts for a container even when there is only one; unattended use requires

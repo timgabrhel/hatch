@@ -1542,10 +1542,10 @@ fn new_from_config_selects_agent_before_starting_container() {
     assert!(h.resolver_calls().is_empty());
     h.no_exec();
     p.send(b"2\n");
-    p.expect("Start this devcontainer?");
+    p.expect("Create this devcontainer?");
     p.expect(PROMPT);
-    contains(&p.output, "Ready to start\r\n  Config:");
-    contains(&p.output, "Agent:     Claude");
+    contains(&p.output, "Ready to create\r\n  Config:");
+    contains(&p.output, "Agent:             Claude");
     assert!(!p.output.contains("No running container matches"));
     assert!(h.resolver_calls().is_empty());
     p.send(b"2\n");
@@ -1820,6 +1820,199 @@ fn core_rejects_workspace_and_non_utf8_before_creating_terminal() {
 }
 
 #[test]
+fn startup_pane_scrolls_and_restores_terminal_on_success_and_cancel() {
+    for cancel in [false, true] {
+        let mut h = Harness::new();
+        let args = h.provision(false);
+        h.env.remove(std::ffi::OsStr::new("HATCH_PLAIN"));
+        h.set("TERM", "xterm-256color");
+        let gate = h.path("release-startup");
+        h.set("HATCH_TEST_UP_GATE", &gate);
+        let mut p = h.pty(&append(
+            &args,
+            &["up", "--agent", "codex", "--workspace", "/custom/project"],
+        ));
+        p.resize(24, 100);
+        p.expect("build-line-39");
+        contains(
+            &console::strip_ansi_codes(&p.output),
+            "\r\n\r\n  Dev container logs",
+        );
+        contains(&p.output, "\x1b[38;5;245m");
+        assert!(!p.output.contains("build-line-00"));
+        p.send(b"kkkkkkkkk");
+        p.expect("build-line-03");
+        p.send(b"f");
+        p.expect("build-line-39");
+        if cancel {
+            p.send(&[3]);
+            contains(&p.finish(1), "dev container cancelled");
+            h.no_exec();
+        } else {
+            fs::write(gate, "done").unwrap();
+            p.finish_with_review(0);
+        }
+    }
+}
+
+#[test]
+fn startup_failure_retains_private_complete_log() {
+    use std::os::unix::fs::PermissionsExt;
+    let mut h = Harness::new();
+    let args = h.provision(false);
+    h.set("TMPDIR", h.path(""));
+    h.set("HATCH_TEST_UP_MODE", "error");
+    let r = h.run_os(&append(&args, &["up", "--no-input"]), b"", 1);
+    let logs: Vec<_> = fs::read_dir(h.path(""))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| {
+            p.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("hatch-devcontainer-")
+        })
+        .collect();
+    assert_eq!(logs.len(), 1);
+    contains(&r.err, &format!("Dev container log: {}", logs[0].display()));
+    contains(
+        &fs::read_to_string(&logs[0]).unwrap(),
+        "fixture build failed",
+    );
+    assert_eq!(
+        fs::metadata(&logs[0]).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+    h.no_exec();
+}
+
+#[test]
+fn startup_confirmation_distinguishes_stopped_from_absent() {
+    for matching in [false, true] {
+        let mut h = Harness::new();
+        let args = h.provision(matching);
+        h.edit_fixture(|v| v[0]["State"]["Running"] = json!(false));
+        let mut p = h.pty(&append(&args, &["--agent", "codex"]));
+        p.expect(if matching {
+            "Start this devcontainer?"
+        } else {
+            "Create this devcontainer?"
+        });
+        p.expect(PROMPT);
+        contains(
+            &p.output,
+            if matching {
+                "Start container"
+            } else {
+                "Create container"
+            },
+        );
+        assert!(!p.output.contains("and enter"));
+        p.send(b"1\n");
+        p.finish(1);
+        assert!(h.resolver_calls().is_empty());
+    }
+}
+
+#[test]
+fn rebuild_is_explicit_scoped_and_preserves_cache_by_default() {
+    for stopped in [false, true] {
+        for no_cache in [false, true] {
+            let mut h = Harness::new();
+            let args = h.provision(true);
+            if stopped {
+                h.edit_fixture(|v| v[0]["State"]["Running"] = json!(false));
+            }
+            let mut args = append(&args, &["rebuild", "--agent", "claude", "--no-input"]);
+            if no_cache {
+                args.push("--no-cache".into());
+            }
+            h.run_os(&args, b"", 0);
+            let calls = h.resolver_calls();
+            let up = calls[0].as_array().unwrap();
+            assert_eq!(up[0], "up");
+            assert!(up.contains(&json!("--remove-existing-container")));
+            assert!(up.contains(&json!("--expect-existing-container")));
+            assert_eq!(up.contains(&json!("--build-no-cache")), no_cache);
+            assert_eq!(calls.iter().filter(|c| c[0] == "up").count(), 1);
+            assert!(!h.calls().iter().any(|c| c.args[0] == "rm"));
+            assert_eq!(last(&h).last().unwrap(), "claude");
+        }
+    }
+}
+
+#[test]
+fn rebuild_refuses_missing_or_ambiguous_identity_and_invalid_options() {
+    let mut h = Harness::new();
+    let args = h.provision(false);
+    h.run(&["rebuild"], 1);
+    h.run_os(
+        &append(&args, &["rebuild", "--container", "alpha-dev"]),
+        b"",
+        1,
+    );
+    h.run_os(&append(&args, &["up", "--no-cache"]), b"", 2);
+    h.run_os(&append(&args, &["rebuild", "--no-input"]), b"", 1);
+    h.edit_fixture(|v| {
+        v[0]["Config"]["Labels"]["devcontainer.config_file"] = json!(args[1].to_str().unwrap());
+        v[0]["Config"]["Labels"]["devcontainer.local_folder"] = json!(args[3].to_str().unwrap());
+    });
+    h.edit_fixture(|v| v[1]["Config"]["Labels"] = v[0]["Config"]["Labels"].clone());
+    h.run_os(&append(&args, &["rebuild", "--no-input"]), b"", 1);
+    assert!(h.resolver_calls().is_empty());
+    h.no_exec();
+}
+
+#[test]
+fn rebuild_menu_selects_target_agent_then_confirms_before_mutation() {
+    for confirm in [false, true] {
+        let mut h = Harness::new();
+        h.provision(true);
+        h.set("TMPDIR", h.path(""));
+        let mut p = h.pty(&[]);
+        p.expect("Rebuild a devcontainer");
+        p.expect(PROMPT);
+        p.send(b"4\n");
+        p.expect("Select a container to rebuild");
+        p.expect(PROMPT);
+        p.send(b"1\n");
+        p.expect("Select an agent");
+        p.expect(PROMPT);
+        assert!(h.resolver_calls().is_empty());
+        p.send(b"2\n");
+        p.expect("Rebuild this devcontainer?");
+        p.expect(PROMPT);
+        contains(&p.output, "deletes files outside persistent mounts");
+        assert!(
+            p.output.find("Dev container log:").unwrap()
+                < p.output.find("Rebuild stops sessions").unwrap()
+        );
+        assert!(h.resolver_calls().is_empty());
+        p.send(if confirm { b"2\n" } else { b"1\n" });
+        if confirm {
+            p.finish_with_review(0);
+            assert_eq!(
+                h.resolver_calls().iter().filter(|c| c[0] == "up").count(),
+                1
+            );
+            assert_eq!(last(&h).last().unwrap(), "claude");
+        } else {
+            p.expect("Select a container");
+            p.expect(PROMPT);
+            p.send(b"q\n");
+            p.finish(1);
+            assert!(h.resolver_calls().is_empty());
+            assert!(!fs::read_dir(h.path("")).unwrap().any(|entry| entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with("hatch-devcontainer-")));
+            h.no_exec();
+        }
+    }
+}
+
+#[test]
 fn core_unavailable_capabilities_are_resolved_before_review() {
     for mode in ["unavailable", "old-cli"] {
         let mut h = core_fixture("hc");
@@ -1842,6 +2035,53 @@ fn core_unavailable_capabilities_are_resolved_before_review() {
         assert!(h.herdr_calls().is_empty());
         assert_eq!(last(&h).last().unwrap(), "codex");
     }
+}
+
+#[test]
+fn rebuild_back_after_completion_does_not_repeat_replacement() {
+    let mut h = Harness::new();
+    let args = h.provision(true);
+    let mut p = h.pty(&append(&args, &["rebuild"]));
+    p.expect("Select an agent");
+    p.expect(PROMPT);
+    p.send(b"2\n");
+    p.expect("Rebuild this devcontainer?");
+    p.expect(PROMPT);
+    p.send(b"2\n");
+    p.expect("Launch this session?");
+    p.expect(PROMPT);
+    p.send(b"q\n");
+    p.expect("Select an agent");
+    p.expect(PROMPT);
+    p.send(b"1\n");
+    p.finish_with_review(0);
+    assert_eq!(
+        h.resolver_calls().iter().filter(|c| c[0] == "up").count(),
+        1
+    );
+}
+
+#[test]
+fn rebuild_handoff_does_not_repeat_rebuild_in_child() {
+    let mut h = core_fixture("hc");
+    let args = h.provision(true);
+    h.edit_fixture(|v| v[0]["Mounts"][0]["Destination"] = json!("/custom/project"));
+    h.run_os(
+        &append(&args, &["rebuild", "--herdr", "--no-input"]),
+        b"",
+        0,
+    );
+    let calls = rows(h.path("core.log"));
+    let run = calls
+        .iter()
+        .find(|c| c[0] == "run" && c[1] != "--help")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert!(!run.contains(&json!("rebuild")));
+    assert!(!run.contains(&json!("--remove-existing-container")));
+    assert!(run.contains(&json!("--here")));
+    assert!(run.contains(&json!("--no-input")));
 }
 
 #[test]
@@ -1881,6 +2121,22 @@ fn core_failure_after_review_does_not_change_the_selected_destination() {
         .iter()
         .any(|c| c[0] == "run" && c[1] != "--help"));
     h.no_launch();
+}
+
+#[test]
+fn rebuild_failure_keeps_log_and_never_retries_or_launches() {
+    let mut h = Harness::new();
+    let args = h.provision(true);
+    h.run_os(&append(&args, &["rebuild"]), b"", 1);
+    assert!(h.resolver_calls().is_empty());
+    h.set("HATCH_TEST_UP_MODE", "error");
+    let output = h.run_os(&append(&args, &["rebuild", "--no-input"]), b"", 1);
+    contains(&output.err, "Dev container log:");
+    assert_eq!(
+        h.resolver_calls().iter().filter(|c| c[0] == "up").count(),
+        1
+    );
+    h.no_exec();
 }
 
 #[test]

@@ -9,6 +9,7 @@ mod menu;
 mod process;
 mod prompt;
 mod provision;
+mod startup;
 mod update;
 mod workspace_input;
 mod worktrees;
@@ -40,7 +41,7 @@ fn run(mut cli: Cli, mut tail: Vec<OsString>) -> Result<()> {
     }
     if interactive {
         match cli.command {
-            None | Some(Action::Up) => prompt::workflow(
+            None | Some(Action::Up | Action::Rebuild { .. }) => prompt::workflow(
                 "Launch agent in container",
                 "Choose where to work and which coding agent to run.",
             ),
@@ -80,8 +81,12 @@ fn run(mut cli: Cli, mut tail: Vec<OsString>) -> Result<()> {
     }
     launch::executable(&cli)?;
     provision::validate(&cli)?;
-    let guided = interactive && matches!(cli.command, None | Some(Action::Up));
-    let initial_cli = cli.clone();
+    let guided = interactive
+        && matches!(
+            cli.command,
+            None | Some(Action::Up | Action::Rebuild { .. })
+        );
+    let mut initial_cli = cli.clone();
     let mut previous = None;
     let mut checkout_back = None;
     'selection: loop {
@@ -151,6 +156,9 @@ fn run(mut cli: Cli, mut tail: Vec<OsString>) -> Result<()> {
             }
             selected
         };
+        if matches!(initial_cli.command, Some(Action::Rebuild { .. })) && cli.command.is_none() {
+            initial_cli.command = None;
+        }
         let mut context = configuration::resolve(&cli, &selected, interactive)?;
         if worktrees::is_action(&cli) {
             return worktrees::manage(&cli, &context, &selected, interactive);

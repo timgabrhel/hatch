@@ -154,6 +154,15 @@ pub enum Action {
         after_help = "Requires --config PATH. Uses the project's normal Dev Container lifecycle hooks.\nReuses a matching running container without rebuilding it or rerunning hooks."
     )]
     Up,
+    /// Rebuild a devcontainer from --config, then review and launch the agent.
+    #[command(
+        after_help = "Requires --config PATH and exactly one existing matching container; omit --container.\nReplacement stops its sessions and discards changes outside persistent mounts.\nConfirms interactively; --no-input authorizes unattended replacement and launch.\nUses the build cache unless --no-cache is supplied."
+    )]
+    Rebuild {
+        /// Rebuild the image without using the build cache.
+        #[arg(long)]
+        no_cache: bool,
+    },
     /// Browse containers interactively; --json or --no-input lists without launching.
     Containers {
         #[arg(long)]

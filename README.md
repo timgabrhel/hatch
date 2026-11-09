@@ -47,6 +47,9 @@ hatch up --config .devcontainer/devcontainer.json
 
 You can also choose **New from devcontainer.json…** in the interactive container menu.
 Startup runs the project's normal Dev Container lifecycle hooks.
+To replace an existing container, choose **Rebuild a devcontainer…**, then select its
+target, or run `hatch rebuild --config .devcontainer/devcontainer.json`.
+Rebuild confirmation precedes replacement; session review follows it.
 
 Forward arguments to an agent after `--`:
 
@@ -64,6 +67,7 @@ scripting, configuration overrides, and all options.
 | `hatch` | Launch through the guided flow. |
 | `hatch update` | Update Hatch to the latest release. |
 | `hatch up --config PATH` | Start or reuse a devcontainer, then launch. |
+| `hatch rebuild --config PATH` | Explicitly replace a devcontainer, then launch. |
 | `hatch containers` | Browse running devcontainers interactively. |
 | `hatch containers --json` | Get a read-only inventory. |
 | `hatch inspect --container NAME` | Check a container's context and available agents. |
