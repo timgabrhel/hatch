@@ -100,6 +100,12 @@ pub fn run(
     run_logged(command, interactive, false, log)
 }
 
+pub fn install(command: &mut Command, interactive: bool) -> Result<(Output, PathBuf)> {
+    let log = prepare_log(true)?;
+    prompt::note(&format!("Installation log: {}", log.path().display()));
+    run_logged(command, interactive, true, log)
+}
+
 fn run_logged(
     command: &mut Command,
     interactive: bool,

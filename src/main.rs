@@ -231,6 +231,7 @@ fn run(mut cli: Cli, mut tail: Vec<OsString>) -> Result<()> {
         worktrees::check_options(&cli, &tail)?;
         configuration::prepare_env(&mut context)?;
         let agent_plan = install::prepare(&cli, &context)?;
+        let mut install_summary = None;
         let destination = herdr::prepare_destination(&mut cli, &context)?;
         if interactive {
             let agent_action = match &agent_plan {
@@ -281,6 +282,15 @@ fn run(mut cli: Cli, mut tail: Vec<OsString>) -> Result<()> {
                 Err(e) if e.starts_with("cancelled") => false,
                 Err(e) => return Err(e),
             };
+            if confirmed && matches!(agent_plan, install::PreparedAgent::Install(_)) {
+                let pending = prompt::review_text(&fields, true);
+                for (key, value) in &mut fields {
+                    if *key == "Agent status" {
+                        *value = "Installed";
+                    }
+                }
+                install_summary = Some((pending, prompt::review_text(&fields, false)));
+            }
             if !confirmed {
                 if checkout_shown {
                     cli = before_checkout;
@@ -299,7 +309,18 @@ fn run(mut cli: Cli, mut tail: Vec<OsString>) -> Result<()> {
                 return Err("cancelled; nothing launched".into());
             }
         }
-        let executable = install::execute(agent_plan, &cli, &context)?;
+        let installation = install::execute(agent_plan, &cli, &context);
+        if let Some((pending, installed)) = install_summary {
+            eprint!(
+                "{}",
+                if installation.is_ok() {
+                    installed
+                } else {
+                    pending
+                }
+            );
+        }
+        let executable = installation?;
         worktrees::prepare(&cli, &context, &mut tail)?;
         if let Some(destination) = &destination {
             let mut child = cli.clone();

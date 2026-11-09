@@ -1915,6 +1915,61 @@ fn startup_confirmation_distinguishes_stopped_from_absent() {
 }
 
 #[test]
+fn installation_pane_preserves_review_and_logs_both_streams() {
+    for mode in ["needs-install", "install-fails"] {
+        let mut h = Harness::new();
+        h.env.remove(std::ffi::OsStr::new("HATCH_PLAIN"));
+        h.set("TERM", "xterm-256color");
+        h.set("TMPDIR", h.path(""));
+        h.set("HATCH_TEST_MODE", mode);
+        let gate = h.path("release-install");
+        h.set("HATCH_TEST_INSTALL_GATE", &gate);
+        let mut p = h.pty(&strings(&[
+            "--container",
+            "alpha-dev",
+            "--agent",
+            "codex",
+            "--workspace",
+            "/workspaces/project",
+            "--here",
+        ]));
+        p.resize(40, 100);
+        p.expect("Install Agent & Launch");
+        assert!(!h
+            .calls()
+            .iter()
+            .any(|c| c.has("hatch-install") && c.args.last().unwrap() == "install"));
+        p.send(b"\r");
+        p.expect("Your session");
+        p.expect("install-stderr-39");
+        assert!(!p.output.contains("install-stdout-00"));
+        p.send(b"kkkkkkkkkkkkkkkkkkkk");
+        p.expect("install-stdout-00");
+        fs::write(gate, "done").unwrap();
+        p.expect("Your session");
+        p.expect("CLI equivalent");
+        let result = p.finish(if mode == "needs-install" { 0 } else { 1 });
+        if mode == "install-fails" {
+            contains(&result, "Installation log:");
+            h.no_launch();
+        }
+        let log = fs::read_dir(h.path(""))
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .find(|p| {
+                p.file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .starts_with("hatch-install-")
+            })
+            .unwrap();
+        let contents = fs::read_to_string(log).unwrap();
+        contains(&contents, "install-stdout-00");
+        contains(&contents, "install-stderr-39");
+    }
+}
+
+#[test]
 fn rebuild_is_explicit_scoped_and_preserves_cache_by_default() {
     for stopped in [false, true] {
         for no_cache in [false, true] {

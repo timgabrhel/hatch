@@ -75,3 +75,9 @@ when a menu closes.
 | `--no-tty` | No Docker terminal allocation; Hatch prompts are controlled separately. |
 
 The accepted session summary and CLI equivalent remain in the terminal transcript.
+Agent installation uses the same scrolling log pane as container startup (Up/Down
+or k/j to scroll, f to follow). After installation, Hatch displays the summary again,
+including on failure; successful installation changes the agent status to Installed.
+Full installer stdout and stderr are saved to a private `hatch-install-*.log` in the
+system temporary directory. Installation and verification failures include its path.
+Plain mode streams installer output and then repeats the summary.

@@ -161,6 +161,16 @@ fn docker(raw: &[OsString], args: &[String]) {
                     fail(1, "Installation requires curl inside the container")
                 }
                 if args.last().unwrap() == "install" {
+                    let gate = variable("HATCH_TEST_INSTALL_GATE");
+                    if !gate.is_empty() {
+                        for i in 0..40 {
+                            println!("install-stdout-{i:02}");
+                            eprintln!("install-stderr-{i:02}");
+                        }
+                        while !Path::new(&gate).exists() {
+                            std::thread::sleep(std::time::Duration::from_millis(10));
+                        }
+                    }
                     if mode == "install-fails" {
                         fail(1, "fixture: download failed")
                     }

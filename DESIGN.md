@@ -69,7 +69,8 @@ private retained temporary log. Interactive rich terminals use an inline scrolli
 plain/nonterminal output streams stderr. Readiness summaries include a muted Dev container log field with its absolute path
 (hatch-devcontainer-*.log), also included in failures. The log is reserved before
 confirmation and removed if cancelled; it is retained once startup begins. Rebuild
-warnings follow the summary as a short dim-yellow note. Pane headings are muted cyan; log text stays muted gray. Both are indented two spaces,
+warnings follow the summary as a short dim-yellow note. Installation log paths are also
+absolute. Pane headings are muted cyan; log text stays muted gray. Both are indented two spaces,
 with a blank line above; the spacer is included in redraw/cleanup and NO_COLOR remains
 supported. Plain streamed logs also use the same indentation.
 stdin remains reserved for the agent. A successful JSON result must identify a running
@@ -233,6 +234,13 @@ available agent, before installation, setup, Herdr terminal creation or agent ex
 The summary is part of the arrow menu redraw area, with explicit wrapping so Back
 clears all rows. Numbered mode reuses an unchanged summary in its transcript. The review contains only its launch action; Escape returns to the preceding choice.
 Accepting the rich review preserves its summary and CLI equivalent in the transcript.
+Agent installation shares the bounded startup log pane, merging installer stdout and
+stderr into a private retained hatch-install-*.log. Installation/verification errors
+include the path. After installation succeeds or fails, the session summary and command
+are displayed again (Installed status on success), so installer output cannot bury them.
+Plain mode retains streaming logs and also restores the summary. Disposable PTY coverage
+checks both installer output streams, scrolling, success/failure summary restoration,
+and terminal settings; no agents are installed for validation.
 Unattended --no-input launches retain their explicit-command behavior. Notices
 and errors wrap into short blocks; inspect renders readable terminal summaries,
 with --json or redirected output preserving full JSON. Plain and NO_COLOR modes remain.

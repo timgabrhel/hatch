@@ -5,7 +5,6 @@ use crate::{
     process::capture,
     prompt, Result,
 };
-use std::{io, process::Stdio};
 
 pub enum PreparedAgent {
     Available(String),
@@ -70,28 +69,33 @@ pub fn execute(plan: PreparedAgent, cli: &Cli, context: &Context) -> Result<Stri
         PreparedAgent::Available(executable) => return Ok(executable),
         PreparedAgent::Install(path) => path,
     };
-    eprintln!(
+    prompt::note(&format!(
         "Installing {} inside {:?} as {:?}...",
         cli.agent.executable(),
         context.container_name,
         context.user
-    );
-    let status = launch::script(
-        context,
-        include_str!("scripts/install.sh"),
-        "hatch-install",
-        &[cli.agent.executable(), "install"],
-    )
-    .stdin(Stdio::null())
-    .stdout(Stdio::from(io::stderr()))
-    .status()
-    .map_err(|e| format!("could not start installer: {e}"))?;
-    if !status.success() {
+    ));
+    let (output, log) = crate::startup::install(
+        &mut launch::script(
+            context,
+            include_str!("scripts/install.sh"),
+            "hatch-install",
+            &[cli.agent.executable(), "install"],
+        ),
+        prompt::available(cli.no_input),
+    )?;
+    if !output.status.success() {
         return Err(format!(
-            "agent installation failed ({status}); no agent launched"
+            "agent installation failed ({}); no agent launched. Installation log: {}",
+            output.status,
+            log.display()
         ));
     }
-    launch::probe(context, &installed, cli.agent)
-        .map_err(|e| format!("installer completed but verification failed: {e}"))?;
+    launch::probe(context, &installed, cli.agent).map_err(|e| {
+        format!(
+            "installer completed but verification failed: {e}. Installation log: {}",
+            log.display()
+        )
+    })?;
     Ok(installed)
 }
